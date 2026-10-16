@@ -15,7 +15,7 @@ DeepSeek Harness (DSH) 沉浸式酒馆角色扮演与角色卡创作插件。为
 
 | 角色选择网格 | 沉浸式对话与开场白切换 | 临时指令抽屉 |
 | :---: | :---: | :---: |
-| ![角色选择](images/1.png) | ![对话界面](images/2.png) | ![临时指令](images/3.png) | ![设置中心](images/4.png) | ![角色卡配置](images/3.png) |
+| ![角色选择](images/1.png) | ![对话界面](images/2.png) | ![临时指令](images/3.png) | ![设置中心](images/4.png) | ![角色卡配置](images/5.png) |
 
 ---
 
