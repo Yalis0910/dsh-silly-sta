@@ -1,0 +1,119 @@
+{
+  "name": "silly-sta",
+  "description": "Role-play conversations and character-card authoring for DeepSeek Harness.",
+  "version": "0.6.0",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.client.json --noEmit",
+    "build": "node scripts/build.mjs",
+    "check": "npm run typecheck && npm run build && npm run verify-imports",
+    "verify-imports": "node scripts/verify-dsh-imports.mjs",
+    "prepare": "node scripts/prepare.mjs",
+    "prepublishOnly": "npm run check"
+  },
+  "main": "lib/index.js",
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./agent": {
+      "default": "./lib/agent.js"
+    },
+    "./client": {
+      "default": "./lib/client.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "keywords": [
+    "dsh",
+    "deepseek",
+    "roleplay",
+    "character-card"
+  ],
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-session",
+        "@deepseek-ai/dsh-client-ui-workspace",
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-ui-chat",
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-ui-tool",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-primitives"
+      ]
+    }
+  },
+  "dependencies": {
+    "jpeg-js": "0.4.4",
+    "pngjs": "7.0.0",
+    "zod": "^4.4.3"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.4",
+    "@deepseek-ai/dsh-home-paths": "^0.2.0-rc.2",
+    "@deepseek-ai/dsh-settings": "^0.2.0-rc.2",
+    "@deepseek-ai/dsh-storage-domain": "^0.2.0-rc.2",
+    "@deepseek-ai/dsh-system-prompt": "^0.2.0-rc.2",
+    "@deepseek-ai/dsh-tools": "^0.2.0-rc.2",
+    "@deepseek-ai/schemastery": "^3.18.4"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.4",
+    "@deepseek-ai/cordis-plugin-loader": "^1.0.5",
+    "@deepseek-ai/dsh-agent": "^0.2.0-rc.2",
+    "@deepseek-ai/dsh-api-session-controller": "^0.2.0-rc.2",
+    "@deepseek-ai/dsh-api-workspace-controller": "^0.2.0-rc.2",
+    "@deepseek-ai/dsh-attachment": "^0.2.0-rc.2",
+    "@deepseek-ai/dsh-client-connection": "^0.2.0-rc.2",
+    "@deepseek-ai/dsh-client-locale": "^0.2.0-rc.2",
+    "@deepseek-ai/dsh-client-ui-chat": "^0.2.0-rc.2",
+    "@deepseek-ai/dsh-client-ui-conversation": "^0.2.0-rc.2",
+    "@deepseek-ai/dsh-client-ui-primitives": "^0.2.0-rc.2",
+    "@deepseek-ai/dsh-client-ui-renderer": "^0.2.0-rc.2",
+    "@deepseek-ai/dsh-client-ui-settings": "^0.2.0-rc.2",
+    "@deepseek-ai/dsh-client-ui-slots": "^0.2.0-rc.2",
+    "@deepseek-ai/dsh-client-ui-tool": "^0.2.0-rc.2",
+    "@deepseek-ai/dsh-home-paths": "^0.2.0-rc.2",
+    "@deepseek-ai/dsh-host-webserver": "^0.2.0-rc.2",
+    "@deepseek-ai/dsh-llm": "^0.2.0-rc.2",
+    "@deepseek-ai/dsh-session": "^0.2.0-rc.2",
+    "@deepseek-ai/dsh-settings": "^0.2.0-rc.2",
+    "@deepseek-ai/dsh-storage": "^0.2.0-rc.2",
+    "@deepseek-ai/dsh-storage-domain": "^0.2.0-rc.2",
+    "@deepseek-ai/dsh-system-prompt": "^0.2.0-rc.2",
+    "@deepseek-ai/dsh-tools": "^0.2.0-rc.2",
+    "@deepseek-ai/schemastery": "^3.18.4",
+    "@types/node": "^22.20.0",
+    "@types/pngjs": "6.0.5",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "18.3.0",
+    "esbuild": "^0.24.0",
+    "react": "^18.3.1",
+    "react-dom": "18.3.1",
+    "typescript": "^5.7.0",
+    "zod": "^4.4.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/chinosk6/silly-sta.git"
+  },
+  "bugs": {
+    "url": "https://github.com/chinosk6/silly-sta/issues"
+  },
+  "homepage": "https://github.com/chinosk6/silly-sta#readme"
+}

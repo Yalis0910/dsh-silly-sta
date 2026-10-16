@@ -1,0 +1,417 @@
+/**
+ * The character-card editor. One reusable surface for two entry points:
+ *  - the「角色扮演」settings section (sub-page reached from the card library)
+ *  - the save_character_card tool view (interactive result card in forge chats)
+ */
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { api, stampedUrl, type CharacterCardDetail, type LoreEntryValue, type RegexScriptValue } from './api.ts'
+import { compileCardRules, toHexColor, withColorValue } from './colorize.tsx'
+import { useT, tf } from './i18n.ts'
+
+const LORE_POSITIONS = ['system_top', 'before_char', 'after_char', 'user_top', 'assistant_top', 'at_depth'] as const
+
+/** String-typed card fields rendered as text areas. */
+type TextKey =
+  | 'name' | 'description' | 'personality' | 'systemPrompt' | 'postHistoryInstructions'
+  | 'scenario' | 'firstMessage' | 'exampleDialogs' | 'creatorNotes'
+
+function Field({ label, children }: { label: string; children: ReactNode }): ReactNode {
+  return (
+    <div className="rp-field">
+      <label>{label}</label>
+      {children}
+    </div>
+  )
+}
+
+export function CardEditor({ cardId, onClose, onDeleted, onSaved, ws }: {
+  cardId: string
+  /** Rendered when the editor lives inside the settings section (back button). */
+  onClose?: () => void
+  onDeleted?: () => void
+  onSaved?: () => void
+  /** Current workspace path, for cards living in the workspace store. */
+  ws?: string | undefined
+}): ReactNode {
+  const t = useT()
+  const [card, setCard] = useState<CharacterCardDetail['card'] | null>(null)
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
+  /** Bumped on every avatar mutation — the file is overwritten under a FIXED
+      URL, so the preview needs a fresh query to escape the browser cache. */
+  const [avatarStamp, setAvatarStamp] = useState(0)
+  const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [tab, setTab] = useState<'profile' | 'prompts' | 'book' | 'regex'>('profile')
+  const fileRef = useRef<HTMLInputElement | null>(null)
+
+  const reload = useCallback(() => {
+    setNotice('')
+    api.getCard(cardId, ws)
+      .then(result => {
+        setCard(result.card)
+        setAvatarUrl(result.avatarUrl)
+      })
+      .catch(err => setError(String(err instanceof Error ? err.message : err)))
+    // `ws` in deps: the workspaces feed loads async — a card opened before it
+    // resolves must re-fetch once the workspace path arrives.
+  }, [cardId, ws])
+  useEffect(reload, [reload])
+
+  const patch = useCallback((partial: Record<string, unknown>) => {
+    setCard(current => (current ? { ...current, ...partial } : current))
+    setNotice('')
+  }, [])
+
+  const save = useCallback(async () => {
+    if (!card) return
+    setBusy(true)
+    setError('')
+    setNotice('')
+    try {
+      await api.updateCard(cardId, card, ws)
+      setNotice(t('rp.editor.saved'))
+      onSaved?.()
+    } catch (err) {
+      setError(String(err instanceof Error ? err.message : err))
+    } finally {
+      setBusy(false)
+    }
+  }, [card, cardId, t, onSaved, ws])
+
+  const uploadAvatar = useCallback(async (files: FileList | null) => {
+    const file = files?.[0]
+    if (!file) return
+    setBusy(true)
+    setError('')
+    try {
+      const result = await api.updateCardAvatar(cardId, await file.arrayBuffer(), ws)
+      setAvatarUrl(result.avatarUrl)
+      setAvatarStamp(Date.now())
+    } catch (err) {
+      setError(String(err instanceof Error ? err.message : err))
+    } finally {
+      setBusy(false)
+      if (fileRef.current) fileRef.current.value = ''
+    }
+  }, [cardId, ws])
+
+  const removeAvatar = useCallback(async () => {
+    setBusy(true)
+    setError('')
+    try {
+      await api.deleteCardAvatar(cardId, ws)
+      setAvatarUrl(null)
+    } catch (err) {
+      setError(String(err instanceof Error ? err.message : err))
+    } finally {
+      setBusy(false)
+    }
+  }, [cardId, ws])
+
+  const removeCard = useCallback(async () => {
+    if (!card || !window.confirm(tf('rp.cards.deleteConfirm', { name: card.name }))) return
+    setBusy(true)
+    try {
+      await api.deleteCard(cardId, ws)
+      onDeleted?.()
+      onClose?.()
+    } catch (err) {
+      setError(String(err instanceof Error ? err.message : err))
+      setBusy(false)
+    }
+  }, [card, cardId, t, onDeleted, onClose, ws])
+
+  if (error && !card) {
+    return (
+      <div className="rp-settings">
+        <div className="rp-error">{error}</div>
+        {onClose ? <button className="rp-btn" onClick={onClose}>{t('rp.editor.back')}</button> : null}
+      </div>
+    )
+  }
+  if (!card) return <div className="rp-settings"><span className="rp-note">{t('rp.settings.loading')}</span></div>
+
+  // Defensive: a host predating the field would omit it from the payload.
+  const scripts = card.regexScripts ?? []
+
+  const field = (key: TextKey, label: string, rows = 2) => {
+    const value = card[key]
+    if (typeof value !== 'string') return null
+    return (
+      <Field label={label}>
+        <textarea rows={rows} value={value} onChange={event => patch({ [key]: event.target.value })} />
+      </Field>
+    )
+  }
+
+  return (
+    <div className="rp-settings rp-editor">
+      <div className="rp-editor-head">
+        {onClose ? <button className="rp-btn" onClick={onClose}>{t('rp.editor.back')}</button> : null}
+        <span className="rp-editor-title">{t('rp.editor.title')}</span>
+        <span className="rp-spacer" />
+        <a className="rp-btn" style={{ textDecoration: 'none' }} href={api.exportPngUrl(cardId, ws)} download>PNG</a>
+        <a className="rp-btn" style={{ textDecoration: 'none' }} href={api.exportJsonUrl(cardId, ws)} download>JSON</a>
+        <button className="rp-btn rp-btn-primary" disabled={busy} onClick={() => void save()}>{t('rp.editor.save')}</button>
+        {notice ? <span className="rp-note" style={{ color: 'var(--yh-accent)' }}>{notice}</span> : null}
+        {error ? <span className="rp-error">{error}</span> : null}
+      </div>
+
+      <div className="rp-editor-tabs">
+        <button
+          type="button"
+          className={`rp-editor-tab${tab === 'profile' ? ' rp-active' : ''}`}
+          onClick={() => setTab('profile')}
+        >
+          {t('rp.editor.tab.profile')}
+        </button>
+        <button
+          type="button"
+          className={`rp-editor-tab${tab === 'prompts' ? ' rp-active' : ''}`}
+          onClick={() => setTab('prompts')}
+        >
+          {t('rp.editor.tab.prompts')}
+        </button>
+        <button
+          type="button"
+          className={`rp-editor-tab${tab === 'book' ? ' rp-active' : ''}`}
+          onClick={() => setTab('book')}
+        >
+          {t('rp.editor.tab.book')} {card.book.length > 0 ? `(${card.book.length})` : ''}
+        </button>
+        <button
+          type="button"
+          className={`rp-editor-tab${tab === 'regex' ? ' rp-active' : ''}`}
+          onClick={() => setTab('regex')}
+        >
+          {t('rp.editor.tab.regex')} {scripts.length > 0 ? `(${scripts.length})` : ''}
+        </button>
+      </div>
+
+      {tab === 'profile' ? (
+        <div className="rp-editor-tab-pane">
+          <div className="rp-editor-avatar-row">
+            {avatarUrl
+              ? <img className="rp-editor-avatar" src={stampedUrl(avatarUrl, Math.max(card.updatedAt ?? 0, avatarStamp))} alt={card.name} />
+              : <div className="rp-editor-avatar rp-avatar-fallback">{card.name.slice(0, 1) || '?'}</div>}
+            <div className="rp-actions">
+              <button className="rp-btn" disabled={busy} onClick={() => fileRef.current?.click()}>{t('rp.editor.avatar.upload')}</button>
+              {avatarUrl ? <button className="rp-btn" disabled={busy} onClick={() => void removeAvatar()}>{t('rp.editor.avatar.remove')}</button> : null}
+              <input ref={fileRef} type="file" accept="image/png" style={{ display: 'none' }} onChange={event => void uploadAvatar(event.target.files)} />
+            </div>
+          </div>
+
+          <div className="rp-inline">
+            <Field label={t('rp.editor.name')}>
+              <input value={card.name} onChange={event => patch({ name: event.target.value })} />
+            </Field>
+            <Field label={t('rp.editor.tags')}>
+              <input value={card.tags.join(', ')} onChange={event => patch({ tags: event.target.value.split(/[,，]/).map(part => part.trim()).filter(Boolean) })} />
+            </Field>
+          </div>
+          {field('description', t('rp.editor.description'), 3)}
+          {field('personality', t('rp.editor.personality'), 6)}
+          {field('scenario', t('rp.editor.scenario'), 3)}
+          {field('creatorNotes', t('rp.editor.creatorNotes'), 2)}
+        </div>
+      ) : null}
+
+      {tab === 'prompts' ? (
+        <div className="rp-editor-tab-pane">
+          {field('firstMessage', t('rp.editor.firstMessage'), 6)}
+          <div className="rp-editor-pane-head" style={{ marginTop: 12 }}>
+            <div>
+              <span className="rp-cardname" style={{ fontSize: 13 }}>{t('rp.editor.altGreetings')}</span>
+              <span className="rp-note" style={{ display: 'block', marginTop: 2 }}>{t('rp.editor.altGreetings.hint')}</span>
+            </div>
+            <span className="rp-spacer" />
+            <button
+              type="button"
+              className="rp-btn"
+              onClick={() => {
+                const current = card.alternateGreetings ?? []
+                patch({ alternateGreetings: [...current, ''] })
+              }}
+            >
+              + {t('rp.editor.altGreetings.add')}
+            </button>
+          </div>
+          {(card.alternateGreetings ?? []).length === 0 ? (
+            <span className="rp-note" style={{ display: 'block', margin: '6px 0 12px' }}>—</span>
+          ) : null}
+          {(card.alternateGreetings ?? []).map((alt, index) => (
+            <div key={index} className="rp-loreentry" style={{ marginTop: 8 }}>
+              <div className="rp-loreentry-head">
+                <span className="rp-muted">#{index + 2}</span>
+                <span className="rp-spacer" />
+                <button
+                  type="button"
+                  className="rp-btn"
+                  onClick={() => {
+                    const next = (card.alternateGreetings ?? []).filter((_, i) => i !== index)
+                    patch({ alternateGreetings: next })
+                  }}
+                >
+                  {t('rp.editor.book.remove')}
+                </button>
+              </div>
+              <textarea
+                rows={4}
+                value={alt}
+                placeholder="备选开场白内容..."
+                onChange={event => {
+                  const next = [...(card.alternateGreetings ?? [])]
+                  next[index] = event.target.value
+                  patch({ alternateGreetings: next })
+                }}
+              />
+            </div>
+          ))}
+          {field('exampleDialogs', t('rp.editor.exampleDialogs'), 4)}
+          {field('systemPrompt', t('rp.editor.systemPrompt'), 4)}
+          {field('postHistoryInstructions', t('rp.editor.postHistory'), 3)}
+        </div>
+      ) : null}
+
+      {tab === 'book' ? (
+        <div className="rp-editor-tab-pane">
+          <div className="rp-editor-pane-head">
+            <h4>{t('rp.editor.book')}</h4>
+            <span className="rp-spacer" />
+            <button
+              className="rp-btn rp-btn-primary"
+              onClick={() => patch({ book: [...card.book, { id: `lore-${Date.now()}-${Math.floor(Math.random() * 1e6)}`, title: '', content: '', keys: [], useRegex: false, constant: false, position: 'after_char', order: card.book.length * 10 + 100, depth: 4, scanDepth: 0, probability: 100, enabled: true }] })}
+            >
+              + {t('rp.editor.book.add')}
+            </button>
+          </div>
+          {card.book.length === 0 ? <span className="rp-note" style={{ display: 'block', margin: '12px 0' }}>—</span> : null}
+          {card.book.map((entry, index) => {
+            const patchEntry = (partial: Partial<LoreEntryValue>) => {
+              const next = card.book.map((item, itemIndex) => itemIndex === index ? { ...item, ...partial } : item)
+              patch({ book: next })
+            }
+            return (
+              <div key={entry.id} className="rp-loreentry">
+                <div className="rp-loreentry-head">
+                  <span className="rp-muted">#{index + 1}</span>
+                  <span className="rp-cardname">{entry.title || '（未命名条目）'}</span>
+                  <span className="rp-spacer" />
+                  <button className="rp-btn" onClick={() => patch({ book: card.book.filter((_, itemIndex) => itemIndex !== index) })}>{t('rp.editor.book.remove')}</button>
+                </div>
+                <div className="rp-inline">
+                  <Field label={t('rp.editor.book.title')}>
+                    <input value={entry.title} onChange={event => patchEntry({ title: event.target.value })} />
+                  </Field>
+                  <Field label={t('rp.editor.book.keys')}>
+                    <input value={entry.keys.join(', ')} onChange={event => patchEntry({ keys: event.target.value.split(/[,，]/).map(part => part.trim()).filter(Boolean) })} />
+                  </Field>
+                </div>
+                <Field label={t('rp.editor.book.content')}>
+                  <textarea rows={3} value={entry.content} onChange={event => patchEntry({ content: event.target.value })} />
+                </Field>
+                <div className="rp-inline">
+                  <Field label={t('rp.editor.book.position')}>
+                    <select value={entry.position} onChange={event => patchEntry({ position: event.target.value as LoreEntryValue['position'] })}>
+                      {LORE_POSITIONS.map(position => <option key={position} value={position}>{position}</option>)}
+                    </select>
+                  </Field>
+                  <Field label={t('rp.editor.book.order')}>
+                    <input type="number" value={entry.order} onChange={event => patchEntry({ order: Number(event.target.value) || 0 })} />
+                  </Field>
+                  <div className="rp-field">
+                    <label>{t('rp.editor.book.constant')}</label>
+                    <input type="checkbox" checked={entry.constant} onChange={event => patchEntry({ constant: event.target.checked })} />
+                  </div>
+                  <div className="rp-field">
+                    <label>{t('rp.editor.book.regex')}</label>
+                    <input type="checkbox" checked={entry.useRegex} onChange={event => patchEntry({ useRegex: event.target.checked })} />
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      ) : null}
+
+      {tab === 'regex' ? (
+        <div className="rp-editor-tab-pane">
+          <div className="rp-editor-pane-head">
+            <div>
+              <h4>{t('rp.editor.regex')}</h4>
+              <span className="rp-note" style={{ display: 'block', marginTop: 2 }}>{t('rp.editor.regex.hint')}</span>
+            </div>
+            <span className="rp-spacer" />
+            <button
+              className="rp-btn rp-btn-primary"
+              onClick={() => patch({
+                regexScripts: [...scripts, {
+                  name: '',
+                  find: '',
+                  replace: '<span style="color:#e5779a">$1</span>',
+                  flags: 'g',
+                  enabled: true,
+                  markdownOnly: true,
+                  promptOnly: false,
+                  placement: [2],
+                }],
+              })}
+            >
+              + {t('rp.editor.regex.add')}
+            </button>
+          </div>
+          {scripts.length === 0 ? <span className="rp-note" style={{ display: 'block', margin: '12px 0' }}>—</span> : null}
+          {scripts.map((script, index) => {
+            const patchScript = (partial: Partial<RegexScriptValue>) => {
+              patch({ regexScripts: scripts.map((item, itemIndex) => itemIndex === index ? { ...item, ...partial } : item) })
+            }
+            const rule = compileCardRules([script])[0]
+            return (
+              <div key={index} className="rp-loreentry">
+                <div className="rp-loreentry-head">
+                  <span className="rp-muted">#{index + 1}</span>
+                  {rule
+                    ? (
+                        <label className="rp-regex-swatch" style={{ background: rule.color }} title={rule.color}>
+                          <input
+                            type="color"
+                            value={toHexColor(rule.color) ?? '#e5779a'}
+                            onChange={event => patchScript({ replace: withColorValue(script.replace, event.target.value) })}
+                          />
+                        </label>
+                      )
+                    : <span className="rp-note">{t('rp.editor.regex.inactive')}</span>}
+                  <span className="rp-spacer" />
+                  <button className="rp-btn" onClick={() => patch({ regexScripts: scripts.filter((_, itemIndex) => itemIndex !== index) })}>{t('rp.editor.book.remove')}</button>
+                </div>
+                <div className="rp-inline">
+                  <Field label={t('rp.editor.regex.name')}>
+                    <input value={script.name} onChange={event => patchScript({ name: event.target.value })} />
+                  </Field>
+                  <div className="rp-field">
+                    <label>{t('rp.editor.regex.enabled')}</label>
+                    <input type="checkbox" checked={script.enabled} onChange={event => patchScript({ enabled: event.target.checked })} />
+                  </div>
+                </div>
+                <Field label={t('rp.editor.regex.find')}>
+                  <input value={script.find} onChange={event => patchScript({ find: event.target.value })} spellCheck={false} />
+                </Field>
+                <Field label={t('rp.editor.regex.replace')}>
+                  <textarea rows={2} value={script.replace} onChange={event => patchScript({ replace: event.target.value })} spellCheck={false} />
+                </Field>
+              </div>
+            )
+          })}
+        </div>
+      ) : null}
+
+      <div className="rp-actions" style={{ marginTop: 16, paddingTop: 12, borderTop: '1px solid var(--yh-border)' }}>
+        <a className="rp-btn" style={{ textDecoration: 'none' }} href={api.exportPngUrl(cardId, ws)} download>{t('rp.editor.exportPng')}</a>
+        <a className="rp-btn" style={{ textDecoration: 'none' }} href={api.exportJsonUrl(cardId, ws)} download>{t('rp.editor.exportJson')}</a>
+        <span className="rp-spacer" />
+        <button className="rp-btn rp-btn-danger" disabled={busy} onClick={() => void removeCard()}>{t('rp.editor.delete')}</button>
+      </div>
+    </div>
+  )
+}
