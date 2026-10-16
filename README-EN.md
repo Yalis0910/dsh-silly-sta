@@ -14,7 +14,7 @@ An immersive role-play and character authoring plugin for DeepSeek Harness (DSH)
 ## Preview
 
 | Character Selection Grid | Immersive Chat & Greeting Switcher | Inline Instruction Drawer | Settings Center | Character card configuration |
-| :---: | :---: | :---: |
+| :---: | :---: | :---: | :---: | :---: |
 | ![Character Selection](images/1.png) | ![Chat Interface](images/2.png) | ![Inline Drawer](images/3.png) | ![Settings Center](images/4.png) | ![Character card configuration](images/5.png) |
 
 ---
