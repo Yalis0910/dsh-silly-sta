@@ -274,6 +274,42 @@ export class RoleplayService extends Service {
     return this.domain.table('cards').delete(id)
   }
 
+  /** Clone an existing card with a new identity, duplicating its avatar if present. */
+  async cloneCard(id: string, wsPath?: string): Promise<{ card: CharacterCard; scope: StoreScope }> {
+    const located = this.locateCard(id, wsPath)
+    if (!located) throw new Error(`unknown card ${id}`)
+    const { card: source, scope, root } = located
+    const newId = randomUUID()
+    const now = Date.now()
+    const clonedCard: CharacterCard = {
+      ...source,
+      id: newId,
+      name: `${source.name} (副本)`,
+      createdAt: now,
+      updatedAt: now,
+      avatar: undefined,
+    }
+    if (source.avatar) {
+      const avatarBytes = await this.readAvatar(source, root)
+      if (avatarBytes) {
+        const file = `${newId}.png`
+        clonedCard.avatar = file
+        if (scope === 'workspace' && root) {
+          await this.ensureWsDirs(root)
+          await writeFile(join(root, 'avatars', file), avatarBytes)
+        } else {
+          await writeFile(join(this.dataDir, 'avatars', file), avatarBytes)
+        }
+      }
+    }
+    if (scope === 'workspace' && root) {
+      await this.writeWsCard(root, clonedCard)
+    } else {
+      await this.domain.table('cards').put(clonedCard.id, clonedCard)
+    }
+    return { card: clonedCard, scope }
+  }
+
   /** Attach a portrait (PNG bytes) to a card, stored beside the card itself. */
   async setAvatar(cardId: string, png: Buffer, wsPath?: string): Promise<CharacterCard> {
     const located = this.locateCard(cardId, wsPath)
@@ -438,7 +474,7 @@ export class RoleplayService extends Service {
       updatedAt: Date.now(),
     }
     // null = "remove the override": the schema keeps these keys absent.
-    for (const key of ['characterId', 'pendingInstruction', 'authorNote', 'workspacePath'] as const) {
+    for (const key of ['characterId', 'userPersonaId', 'pendingInstruction', 'authorNote', 'workspacePath'] as const) {
       if (merged[key] === null || merged[key] === '') delete merged[key]
     }
     const next = SessionBinding.parse(merged)

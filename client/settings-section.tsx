@@ -1,7 +1,7 @@
 /** The「角色扮演」settings page: user identity, storage, gallery and card library + sub-pages. */
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { IconQuestionOutlineRegular, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
-import { api, formatBytes, stampedUrl, type CardSummary, type GalleryUsage, type RoleplaySettingsValue, type StoreScope } from './api.ts'
+import { api, formatBytes, stampedUrl, type CardSummary, type GalleryUsage, type RoleplaySettingsValue, type StoreScope, type UserPersonaValue } from './api.ts'
 import { CardEditor } from './card-editor.tsx'
 import { ImageGalleryPage } from './gallery.tsx'
 import { currentWorkspace, subscribeWorkspaces, type WorkspaceInfo } from './runtime.ts'
@@ -51,6 +51,7 @@ export function RoleplaySettingsSection(): ReactNode {
   const [editing, setEditing] = useState<string | null>(null)
   /** Whether the image-gallery sub-page replaces the section body. */
   const [gallery, setGallery] = useState(false)
+  const [tab, setTab] = useState<'cards' | 'player' | 'prefs'>('cards')
   const saveTimer = useRef<number | undefined>(undefined)
   /** The workspace the open session belongs to — the workspace-store target. */
   const ws = useSyncExternalStore(subscribeWorkspaces, currentWorkspace)
@@ -108,56 +109,211 @@ export function RoleplaySettingsSection(): ReactNode {
         {error ? <div className="rp-error">{error}</div> : null}
       </div>
 
-      <div>
-        <h4>{t('rp.player.heading')}</h4>
-        <div className="rp-inline">
-          {text('userName', t('rp.player.name'))}
+      <div className="rp-editor-tabs rp-settings-tabs">
+        <button
+          type="button"
+          className={`rp-editor-tab${tab === 'cards' ? ' rp-active' : ''}`}
+          onClick={() => setTab('cards')}
+        >
+          {t('rp.settings.tab.cards')}
+        </button>
+        <button
+          type="button"
+          className={`rp-editor-tab${tab === 'player' ? ' rp-active' : ''}`}
+          onClick={() => setTab('player')}
+        >
+          {t('rp.settings.tab.player')}
+        </button>
+        <button
+          type="button"
+          className={`rp-editor-tab${tab === 'prefs' ? ' rp-active' : ''}`}
+          onClick={() => setTab('prefs')}
+        >
+          {t('rp.settings.tab.prefs')}
+        </button>
+      </div>
+
+      {tab === 'cards' ? (
+        <div className="rp-settings-tab-pane">
+          <CardManager onEdit={setEditing} ws={ws} />
+          <GalleryEntry onOpen={() => setGallery(true)} ws={ws?.path} />
         </div>
-        <Field label={t('rp.player.persona')}>
-          <textarea value={draft.userPersona} onChange={event => patch({ userPersona: event.target.value })} />
-        </Field>
+      ) : null}
+
+      {tab === 'player' ? (
+        <div className="rp-settings-tab-pane">
+          <div>
+            <h4>{t('rp.player.heading')}</h4>
+            <div className="rp-inline">
+              {text('userName', t('rp.player.name'))}
+            </div>
+            <Field label={t('rp.player.persona')}>
+              <textarea value={draft.userPersona} onChange={event => patch({ userPersona: event.target.value })} />
+            </Field>
+            <UserPersonaManager
+              personas={draft.userPersonas ?? []}
+              onChange={userPersonas => patch({ userPersonas })}
+            />
+          </div>
+        </div>
+      ) : null}
+
+      {tab === 'prefs' ? (
+        <div className="rp-settings-tab-pane">
+          <div>
+            <h4>{t('rp.choice.heading')}</h4>
+            <div className="rp-inline">
+              <Field label={t('rp.choice.mode')}>
+                <select value={draft.choiceMode ? 'on' : 'off'} onChange={event => patch({ choiceMode: event.target.value === 'on' })}>
+                  <option value="off">{t('rp.choice.off')}</option>
+                  <option value="on">{t('rp.choice.on')}</option>
+                </select>
+              </Field>
+              <Field label={t('rp.choice.count')}>
+                <input
+                  type="number" min={2} max={8} value={draft.choiceCount}
+                  onChange={event => patch({ choiceCount: Math.min(8, Math.max(2, Number(event.target.value) || 2)) })}
+                />
+              </Field>
+            </div>
+          </div>
+
+          <div>
+            <h4>{t('rp.risk.heading')}</h4>
+            <span className="rp-note">{t('rp.risk.warning')}</span>
+            <RiskToggle
+              label={t('rp.risk.fileTools')}
+              hint={t('rp.risk.fileTools.hint')}
+              value={draft.allowFileTools}
+              onToggle={() => patch({ allowFileTools: !draft.allowFileTools })}
+            />
+            <RiskToggle
+              label={t('rp.risk.webTools')}
+              hint={t('rp.risk.webTools.hint')}
+              value={draft.allowWebTools}
+              onToggle={() => patch({ allowWebTools: !draft.allowWebTools })}
+            />
+          </div>
+
+          <StorageBlock draft={draft} patch={patch} ws={ws} />
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function UserPersonaManager({ personas, onChange }: {
+  personas: UserPersonaValue[]
+  onChange: (personas: UserPersonaValue[]) => void
+}): ReactNode {
+  const t = useT()
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [draftName, setDraftName] = useState('')
+  const [draftPersona, setDraftPersona] = useState('')
+
+  const startCreate = () => {
+    setEditingId('new')
+    setDraftName('')
+    setDraftPersona('')
+  }
+
+  const startEdit = (p: UserPersonaValue) => {
+    setEditingId(p.id)
+    setDraftName(p.name)
+    setDraftPersona(p.persona)
+  }
+
+  const cancel = () => {
+    setEditingId(null)
+  }
+
+  const save = () => {
+    const trimmedName = draftName.trim()
+    if (!trimmedName) return
+    if (editingId === 'new') {
+      const newPersona: UserPersonaValue = {
+        id: crypto.randomUUID(),
+        name: trimmedName,
+        persona: draftPersona.trim(),
+      }
+      onChange([...personas, newPersona])
+    } else {
+      onChange(personas.map(p => (p.id === editingId ? { ...p, name: trimmedName, persona: draftPersona.trim() } : p)))
+    }
+    setEditingId(null)
+  }
+
+  const remove = (p: UserPersonaValue) => {
+    if (window.confirm(tf('rp.player.personas.deleteConfirm', { name: p.name }))) {
+      onChange(personas.filter(item => item.id !== p.id))
+      if (editingId === p.id) setEditingId(null)
+    }
+  }
+
+  return (
+    <div className="rp-persona-manager">
+      <div className="rp-cardmanager-head" style={{ marginTop: 12 }}>
+        <div>
+          <span className="rp-cardname" style={{ fontSize: 13 }}>{t('rp.player.personas')}</span>
+          <span className="rp-note" style={{ display: 'block', marginTop: 2 }}>{t('rp.player.personas.hint')}</span>
+        </div>
+        <button type="button" className="rp-btn rp-btn-primary" onClick={startCreate}>
+          + {t('rp.player.personas.add')}
+        </button>
       </div>
 
-      <div>
-        <h4>{t('rp.risk.heading')}</h4>
-        <span className="rp-note">{t('rp.risk.warning')}</span>
-        <RiskToggle
-          label={t('rp.risk.fileTools')}
-          hint={t('rp.risk.fileTools.hint')}
-          value={draft.allowFileTools}
-          onToggle={() => patch({ allowFileTools: !draft.allowFileTools })}
-        />
-        <RiskToggle
-          label={t('rp.risk.webTools')}
-          hint={t('rp.risk.webTools.hint')}
-          value={draft.allowWebTools}
-          onToggle={() => patch({ allowWebTools: !draft.allowWebTools })}
-        />
-      </div>
-
-      <div>
-        <h4>{t('rp.choice.heading')}</h4>
-        <div className="rp-inline">
-          <Field label={t('rp.choice.mode')}>
-            <select value={draft.choiceMode ? 'on' : 'off'} onChange={event => patch({ choiceMode: event.target.value === 'on' })}>
-              <option value="off">{t('rp.choice.off')}</option>
-              <option value="on">{t('rp.choice.on')}</option>
-            </select>
-          </Field>
-          <Field label={t('rp.choice.count')}>
+      {editingId !== null ? (
+        <div className="rp-persona-editbox">
+          <Field label={t('rp.player.personas.name')}>
             <input
-              type="number" min={2} max={8} value={draft.choiceCount}
-              onChange={event => patch({ choiceCount: Math.min(8, Math.max(2, Number(event.target.value) || 2)) })}
+              value={draftName}
+              placeholder={t('rp.player.personas.name')}
+              onChange={e => setDraftName(e.target.value)}
+              autoFocus
             />
           </Field>
+          <Field label={t('rp.player.personas.desc')}>
+            <textarea
+              rows={3}
+              value={draftPersona}
+              placeholder={t('rp.player.personas.desc')}
+              onChange={e => setDraftPersona(e.target.value)}
+            />
+          </Field>
+          <div className="rp-actions">
+            <button type="button" className="rp-btn rp-btn-primary" disabled={!draftName.trim()} onClick={save}>
+              {t('rp.editor.save')}
+            </button>
+            <button type="button" className="rp-btn" onClick={cancel}>
+              {t('rp.dock.cancel')}
+            </button>
+          </div>
         </div>
-      </div>
+      ) : null}
 
-      <StorageBlock draft={draft} patch={patch} ws={ws} />
-
-      <GalleryEntry onOpen={() => setGallery(true)} ws={ws?.path} />
-
-      <CardManager onEdit={setEditing} ws={ws} />
+      {personas.length === 0 ? (
+        <span className="rp-note" style={{ display: 'block', marginTop: 4 }}>{t('rp.player.personas.empty')}</span>
+      ) : (
+        <div className="rp-persona-list">
+          {personas.map(p => (
+            <div key={p.id} className="rp-persona-card">
+              <div className="rp-persona-card-head">
+                <span className="rp-persona-card-name">{p.name}</span>
+                <span className="rp-spacer" />
+                <button type="button" className="rp-btn" onClick={() => startEdit(p)}>
+                  {t('rp.cards.edit')}
+                </button>
+                <button type="button" className="rp-btn rp-btn-danger" onClick={() => remove(p)}>
+                  {t('rp.cards.delete')}
+                </button>
+              </div>
+              {p.persona ? (
+                <div className="rp-persona-card-desc">{p.persona}</div>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -459,6 +615,16 @@ function CardManager({ onEdit, ws }: { onEdit: (cardId: string) => void; ws: Wor
                 <div className="rp-actions rp-cardrow-actions">
                   <button className="rp-btn rp-btn-primary" onClick={() => onEdit(card.id)}>{t('rp.cards.edit')}</button>
                   <button
+                    className="rp-btn"
+                    title={t('rp.cards.clone')}
+                    disabled={busy}
+                    onClick={() => {
+                      void api.cloneCard(card.id, wsPath).then(reload).catch(err => setError(String(err)))
+                    }}
+                  >
+                    {t('rp.cards.clone')}
+                  </button>
+                  <button
                     className={`rp-btn ${card.scope === 'global' ? 'rp-btn-green' : 'rp-btn-blue'}`}
                     disabled={card.scope === 'global' && !ws}
                     title={card.scope === 'global' ? t('rp.cards.toWorkspace') : t('rp.cards.toGlobal')}
@@ -466,8 +632,10 @@ function CardManager({ onEdit, ws }: { onEdit: (cardId: string) => void; ws: Wor
                   >
                     {card.scope === 'global' ? t('rp.cards.toWorkspace') : t('rp.cards.toGlobal')}
                   </button>
-                  <a className="rp-btn" style={{ textDecoration: 'none' }} href={api.exportPngUrl(card.id, wsPath)} download>PNG</a>
-                  <a className="rp-btn" style={{ textDecoration: 'none' }} href={api.exportJsonUrl(card.id, wsPath)} download>JSON</a>
+                  <div className="rp-btn-group" title="导出角色卡文件">
+                    <a className="rp-btn" href={api.exportPngUrl(card.id, wsPath)} download>PNG</a>
+                    <a className="rp-btn" href={api.exportJsonUrl(card.id, wsPath)} download>JSON</a>
+                  </div>
                   <button
                     className="rp-btn rp-btn-danger"
                     onClick={() => {

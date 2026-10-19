@@ -123,15 +123,17 @@ function useOpeningHolder(active: boolean): HTMLElement | null {
 type BoundCard = NonNullable<SessionState['card']>
 
 /** The bound card's opening message as a character bubble (macros resolved, prose colored). */
-function OpeningBubble({ card, rules, greetingIndex = 0, onSwitchGreeting, canSwitch = true }: {
+function OpeningBubble({ card, rules, greetingIndex = 0, onSwitchGreeting, canSwitch = true, userName: propUserName }: {
   card: BoundCard
   rules: readonly CardColorRule[]
   greetingIndex?: number
   onSwitchGreeting?: (index: number) => void
   canSwitch?: boolean
+  userName?: string
 }): React.ReactNode {
   const t = useT()
-  const userName = useUserName()
+  const fallbackUserName = useUserName()
+  const userName = propUserName || fallbackUserName
   const allGreetings = useMemo(() => [card.firstMessage, ...(card.alternateGreetings ?? [])].filter(Boolean), [card])
   const activeIndex = Math.min(Math.max(0, greetingIndex), Math.max(0, allGreetings.length - 1))
   const message = allGreetings[activeIndex] ?? card.firstMessage
@@ -172,13 +174,15 @@ function OpeningBubble({ card, rules, greetingIndex = 0, onSwitchGreeting, canSw
 }
 
 /** Compact opening preview inside the dock (blank sessions, before the first send). */
-function OpeningInline({ card, rules, greetingIndex = 0, onSwitchGreeting }: {
+function OpeningInline({ card, rules, greetingIndex = 0, onSwitchGreeting, userName: propUserName }: {
   card: BoundCard
   rules: readonly CardColorRule[]
   greetingIndex?: number
   onSwitchGreeting?: (index: number) => void
+  userName?: string
 }): React.ReactNode {
-  const userName = useUserName()
+  const fallbackUserName = useUserName()
+  const userName = propUserName || fallbackUserName
   const allGreetings = useMemo(() => [card.firstMessage, ...(card.alternateGreetings ?? [])].filter(Boolean), [card])
   const activeIndex = Math.min(Math.max(0, greetingIndex), Math.max(0, allGreetings.length - 1))
   const message = allGreetings[activeIndex] ?? card.firstMessage
@@ -304,14 +308,20 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
     setBusy(true)
     try {
       const targetSessionId = sessionId || openSessionId() || 'new'
-      await api.updateSession(targetSessionId, { mode, characterId: cardId, ...(wsPath ? { workspacePath: wsPath } : {}) })
+      const selectedCard = cards?.find(c => c.id === cardId)
+      await api.updateSession(targetSessionId, {
+        mode,
+        characterId: cardId,
+        userPersonaId: selectedCard?.userPersonaId ?? null,
+        ...(wsPath ? { workspacePath: wsPath } : {}),
+      })
       reload()
     } catch (err) {
       setError(String(err instanceof Error ? err.message : err))
     } finally {
       setBusy(false)
     }
-  }, [sessionId, mode, reload, wsPath])
+  }, [sessionId, mode, reload, wsPath, cards])
 
   const sendInstruction = useCallback((instruction: string) => {
     inputActions.setDraft(`[系统指令: ${instruction}]`)
@@ -399,6 +409,30 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
 
   const activeGreetingIndex = state.binding?.greetingIndex ?? 0
 
+  const userPersonas = state.userPersonas ?? []
+  const activePersonaId = state.binding?.userPersonaId || bound.userPersonaId || ''
+  const matchedPersona = activePersonaId && userPersonas.length > 0
+    ? userPersonas.find(p => p.id === activePersonaId)
+    : undefined
+  const effectiveUserName = matchedPersona?.name || state.defaultUserName || '你'
+
+  const personaSelect = !isForge ? (
+    <select
+      className="rp-persona-select"
+      value={activePersonaId}
+      title={t('rp.dock.persona')}
+      onChange={e => {
+        const val = e.target.value.trim() === '' ? null : e.target.value
+        void api.updateSession(sessionId, { userPersonaId: val }).then(reload).catch(() => {})
+      }}
+    >
+      <option value="">{t('rp.dock.persona.default')} ({state.defaultUserName || '你'})</option>
+      {userPersonas.map(p => (
+        <option key={p.id} value={p.id}>{p.name}</option>
+      ))}
+    </select>
+  ) : null
+
   const hasAuthorNote = (state.binding?.authorNote ?? '').trim() !== ''
   const authorNoteButton = !isForge ? (
     <button
@@ -445,6 +479,7 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
         <Tooltip label={bound.name} side="bottom">
           <span className="rp-name">{bound.name}</span>
         </Tooltip>
+        {personaSelect}
         <span className="rp-muted">{t('rp.dock.answering')}</span>
         <span className="rp-spacer" />
         {toggles}
@@ -481,6 +516,7 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
           <Tooltip label={bound.name} side="bottom">
             <span className="rp-name">{bound.name}</span>
           </Tooltip>
+          {personaSelect}
           {isForge ? <span className="rp-muted">{t('rp.dock.forge.editing')}</span> : null}
           <span className="rp-spacer" />
           {toggles}
@@ -511,6 +547,7 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
             rules={cardRules}
             greetingIndex={activeGreetingIndex}
             onSwitchGreeting={switchGreeting}
+            userName={effectiveUserName}
           />
         ) : null}
         {error ? <span className="rp-error">{error}</span> : null}
@@ -522,12 +559,21 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
           rules={cardRules}
           greetingIndex={activeGreetingIndex}
           onSwitchGreeting={switchGreeting}
+          userName={effectiveUserName}
         />,
         openingHolder
       ) : null}
     </>
   )
 }
+
+const INSTRUCTION_PRESETS = [
+  { labelKey: 'rp.dock.preset.nextDay', textKey: 'rp.dock.preset.nextDay.text' },
+  { labelKey: 'rp.dock.preset.monologue', textKey: 'rp.dock.preset.monologue.text' },
+  { labelKey: 'rp.dock.preset.sensory', textKey: 'rp.dock.preset.sensory.text' },
+  { labelKey: 'rp.dock.preset.twist', textKey: 'rp.dock.preset.twist.text' },
+  { labelKey: 'rp.dock.preset.clash', textKey: 'rp.dock.preset.clash.text' },
+] as const
 
 function InstructionTray({ sessionId, staged, reload, onClose }: {
   sessionId: string
@@ -563,6 +609,13 @@ function InstructionTray({ sessionId, staged, reload, onClose }: {
     ref.current?.focus()
   }, [stage])
 
+  const applyPreset = useCallback((presetText: string) => {
+    const current = text.trim()
+    const next = current ? `${current}；${presetText}` : presetText
+    stage(next)
+    ref.current?.focus()
+  }, [text, stage])
+
   return (
     <div className="rp-tray-panel">
       <div className="rp-tray-header">
@@ -575,6 +628,19 @@ function InstructionTray({ sessionId, staged, reload, onClose }: {
           ) : null}
           <button type="button" className="rp-popover-close" onClick={onClose} title="关闭">×</button>
         </div>
+      </div>
+      <div className="rp-chip-row">
+        {INSTRUCTION_PRESETS.map((p) => (
+          <button
+            key={p.labelKey}
+            type="button"
+            className="rp-chip"
+            title={t(p.textKey)}
+            onClick={() => applyPreset(t(p.textKey))}
+          >
+            + {t(p.labelKey)}
+          </button>
+        ))}
       </div>
       <textarea
         ref={ref}

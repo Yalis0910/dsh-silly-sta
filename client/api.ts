@@ -3,6 +3,13 @@
 /** Which store an item lives in. */
 export type StoreScope = 'global' | 'workspace'
 
+export interface UserPersonaValue {
+  id: string
+  name: string
+  persona: string
+  avatar?: string
+}
+
 export interface CardSummary {
   id: string
   name: string
@@ -13,6 +20,7 @@ export interface CardSummary {
   updatedAt: number
   avatarUrl: string | null
   bookEntries: number
+  userPersonaId?: string
   scope: StoreScope
 }
 
@@ -20,6 +28,7 @@ export interface SessionState {
   binding: {
     mode: string
     characterId?: string
+    userPersonaId?: string
     choiceMode?: boolean
     pendingInstruction?: string
     authorNote?: string
@@ -33,9 +42,12 @@ export interface SessionState {
     alternateGreetings?: string[]
     avatarUrl: string | null
     regexScripts: RegexScriptValue[]
+    userPersonaId?: string
     updatedAt: number
   } | null
   choiceModeDefault: boolean
+  userPersonas?: UserPersonaValue[]
+  defaultUserName?: string
 }
 
 /** Card-carried regex script (the client applies the display-coloring subset). */
@@ -81,6 +93,7 @@ export interface CharacterCardDetail {
     tags: string[]
     book: LoreEntryValue[]
     regexScripts: RegexScriptValue[]
+    userPersonaId?: string
     avatar?: string
     favorite: boolean
     createdAt: number
@@ -93,6 +106,7 @@ export interface CharacterCardDetail {
 export interface RoleplaySettingsValue {
   userName: string
   userPersona: string
+  userPersonas: UserPersonaValue[]
   allowFileTools: boolean
   allowWebTools: boolean
   workspaceSubfolder: string
@@ -126,6 +140,10 @@ export const api = {
     }),
   cards: (ws?: string) => request<{ cards: CardSummary[] }>(withWs('/cards', ws)),
   deleteCard: (id: string, ws?: string) => request<{ deleted: boolean }>(withWs(`/cards/${id}`, ws), { method: 'DELETE' }),
+  cloneCard: (id: string, ws?: string) =>
+    request<{ card: unknown; avatarUrl: string | null; scope: StoreScope }>(withWs(`/cards/${id}/clone`, ws), {
+      method: 'POST',
+    }),
   updateCard: (id: string, patch: object, ws?: string) =>
     request<{ card: unknown }>(withWs(`/cards/${id}`, ws), {
       method: 'PUT',
@@ -157,6 +175,7 @@ export const api = {
   updateSession: (sessionId: string, patch: {
     mode?: string
     characterId?: string | null
+    userPersonaId?: string | null
     choiceMode?: boolean
     /** One-shot stage direction sent with the next message; null clears it. */
     pendingInstruction?: string | null

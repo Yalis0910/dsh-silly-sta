@@ -98,6 +98,8 @@ export const CharacterCard = z.object({
   /** Card-carried regex scripts (display coloring on the client). */
   regexScripts: z.array(RegexScript).default([]),
   /** File name under the data dir's avatars/ folder, when an avatar exists. */
+  /** Optional player persona ID assigned to this character. */
+  userPersonaId: z.string().optional(),
   avatar: z.string().optional(),
   favorite: z.boolean().default(false),
   createdAt: z.number().int().default(0),
@@ -105,11 +107,21 @@ export const CharacterCard = z.object({
 })
 export type CharacterCard = z.infer<typeof CharacterCard>
 
+/** User persona profile definition. */
+export const UserPersona = z.object({
+  id: z.string(),
+  name: z.string(),
+  persona: z.string().default(''),
+})
+export type UserPersona = z.infer<typeof UserPersona>
+
 /** Per-session role-play state. */
 export const SessionBinding = z.object({
   sessionId: z.string(),
   mode: z.enum(['roleplay', 'forge']),
   characterId: z.string().optional(),
+  /** Active player persona ID for this session (overrides card default). */
+  userPersonaId: z.string().optional(),
   /** One-shot stage direction appended to the NEXT user message, then cleared. */
   pendingInstruction: z.string().optional(),
   /** Persistent scene direction / mood / atmosphere (Author's Note), active across turns until cleared. */

@@ -463,6 +463,119 @@ export const CSS = `
   gap: 6px;
 }
 
+/* ── Instruction Preset Chips ─────────────────────────────────────── */
+.rp-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+.rp-chip {
+  cursor: pointer;
+  user-select: none;
+  font-family: var(--yh-font-sans);
+  font-size: 11px;
+  line-height: 16px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--yh-border-subtle);
+  background: var(--yh-paper-2);
+  color: var(--yh-neutral-8);
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+.rp-chip:hover {
+  background: var(--yh-accent-soft);
+  border-color: var(--yh-accent-line);
+  color: var(--yh-accent);
+}
+.rp-chip:active {
+  transform: translateY(1px);
+}
+
+/* ── Persona Switcher in Dock ─────────────────────────────────────── */
+.rp-persona-select {
+  font-family: var(--yh-font-sans);
+  font-size: 12px;
+  line-height: 18px;
+  padding: 4px 8px;
+  border-radius: 9px;
+  border: 1px solid var(--yh-border);
+  background: var(--yh-paper);
+  color: var(--yh-neutral-9);
+  cursor: pointer;
+  outline: none;
+  max-width: 140px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: all 0.15s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.rp-persona-select:hover {
+  background: var(--yh-neutral-2);
+  border-color: var(--yh-border-strong);
+  color: var(--yh-neutral-10);
+}
+.rp-persona-select:focus {
+  border-color: var(--yh-accent);
+}
+
+/* ── User Persona Library in Settings ─────────────────────────────── */
+.rp-persona-manager {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+.rp-persona-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.rp-persona-card {
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--yh-border);
+  background: var(--yh-paper);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: all 0.18s ease;
+}
+.rp-persona-card:hover {
+  border-color: var(--yh-border-strong);
+  background: var(--yh-neutral-1);
+}
+.rp-persona-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.rp-persona-card-name {
+  font-family: var(--yh-font-serif);
+  font-weight: 600;
+  font-size: 13.5px;
+  color: var(--yh-neutral-10);
+}
+.rp-persona-card-desc {
+  font-size: 12px;
+  color: var(--yh-neutral-7);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.rp-persona-editbox {
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--yh-accent-line);
+  background: var(--yh-paper);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
 .rp-popover {
   position: relative;
   display: inline-flex;
@@ -1048,15 +1161,60 @@ export const CSS = `
 .rp-cardrow-actions {
   flex: none;
   flex-shrink: 0;
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.rp-cardrow-actions .rp-btn {
+  padding: 4px 8px;
+  font-size: 11.5px;
+  line-height: 16px;
+  border-radius: 8px;
+}
+.rp-btn-group {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 8px;
+  border: 1px solid var(--yh-border);
+  overflow: hidden;
+  background: var(--yh-neutral-1);
+}
+.rp-btn-group .rp-btn {
+  border: none;
+  border-radius: 0;
+  padding: 4px 8px;
+  font-size: 11px;
+  line-height: 16px;
+  font-family: var(--yh-font-mono);
+  background: transparent;
+  color: var(--yh-neutral-8);
+  text-decoration: none;
+}
+.rp-btn-group .rp-btn:hover {
+  background: var(--yh-neutral-2);
+  color: var(--yh-neutral-10);
+}
+.rp-btn-group .rp-btn + .rp-btn {
+  border-left: 1px solid var(--yh-border);
 }
 
-/* ── Card Editor Tabs ───────────────────────────────────────────────── */
+/* ── Card Editor & Settings Tabs ───────────────────────────────────── */
 .rp-editor-tabs {
   display: flex;
   gap: 4px;
   border-bottom: 1px solid var(--yh-border);
   margin: 12px 0 16px;
   overflow-x: auto;
+}
+.rp-settings-tabs {
+  margin: 10px 0 18px;
+  gap: 6px;
+}
+.rp-settings-tab-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
 }
 .rp-editor-tab {
   background: transparent;

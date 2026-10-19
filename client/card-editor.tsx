@@ -4,7 +4,7 @@
  *  - the save_character_card tool view (interactive result card in forge chats)
  */
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
-import { api, stampedUrl, type CharacterCardDetail, type LoreEntryValue, type RegexScriptValue } from './api.ts'
+import { api, stampedUrl, type CharacterCardDetail, type LoreEntryValue, type RegexScriptValue, type UserPersonaValue } from './api.ts'
 import { compileCardRules, toHexColor, withColorValue } from './colorize.tsx'
 import { useT, tf } from './i18n.ts'
 
@@ -35,6 +35,7 @@ export function CardEditor({ cardId, onClose, onDeleted, onSaved, ws }: {
 }): ReactNode {
   const t = useT()
   const [card, setCard] = useState<CharacterCardDetail['card'] | null>(null)
+  const [personas, setPersonas] = useState<UserPersonaValue[]>([])
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   /** Bumped on every avatar mutation — the file is overwritten under a FIXED
       URL, so the preview needs a fresh query to escape the browser cache. */
@@ -44,6 +45,10 @@ export function CardEditor({ cardId, onClose, onDeleted, onSaved, ws }: {
   const [busy, setBusy] = useState(false)
   const [tab, setTab] = useState<'profile' | 'prompts' | 'book' | 'regex'>('profile')
   const fileRef = useRef<HTMLInputElement | null>(null)
+
+  useEffect(() => {
+    api.settings().then(res => setPersonas(res.value.userPersonas ?? [])).catch(() => {})
+  }, [])
 
   const reload = useCallback(() => {
     setNotice('')
@@ -210,6 +215,18 @@ export function CardEditor({ cardId, onClose, onDeleted, onSaved, ws }: {
               <input value={card.tags.join(', ')} onChange={event => patch({ tags: event.target.value.split(/[,，]/).map(part => part.trim()).filter(Boolean) })} />
             </Field>
           </div>
+          <Field label={t('rp.editor.userPersona')}>
+            <select
+              value={card.userPersonaId ?? ''}
+              onChange={event => patch({ userPersonaId: event.target.value.trim() === '' ? undefined : event.target.value })}
+            >
+              <option value="">{t('rp.editor.userPersona.none')}</option>
+              {personas.map(p => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+            <span className="rp-note" style={{ display: 'block', marginTop: 4 }}>{t('rp.editor.userPersona.hint')}</span>
+          </Field>
           {field('description', t('rp.editor.description'), 3)}
           {field('personality', t('rp.editor.personality'), 6)}
           {field('scenario', t('rp.editor.scenario'), 3)}

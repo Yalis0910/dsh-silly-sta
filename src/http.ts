@@ -81,6 +81,7 @@ async function route(req: IncomingMessage, res: ServerResponse, service: Rolepla
         updatedAt: card.updatedAt,
         avatarUrl: service.avatarUrl(card, card.scope, ws) ?? null,
         bookEntries: card.book.length,
+        userPersonaId: card.userPersonaId,
         scope: card.scope,
       })),
     })
@@ -116,6 +117,11 @@ async function route(req: IncomingMessage, res: ServerResponse, service: Rolepla
       const body = JSON.parse((await readBody(req)).toString('utf8')) as object
       const card = await service.saveCard({ ...service.getCard(id, ws), ...body, id }, { wsPath: ws })
       sendJson(res, 200, { card })
+      return
+    }
+    if (rest === '/clone' && method === 'POST') {
+      const { card, scope } = await service.cloneCard(id, ws)
+      sendJson(res, 200, { card, avatarUrl: service.avatarUrl(card, scope, ws) ?? null, scope })
       return
     }
     if (rest === '' && method === 'DELETE') {
@@ -182,10 +188,13 @@ async function route(req: IncomingMessage, res: ServerResponse, service: Rolepla
               alternateGreetings: card.alternateGreetings,
               avatarUrl: service.avatarUrl(card, cardScope, cardWs) ?? null,
               regexScripts: card.regexScripts,
+              userPersonaId: card.userPersonaId,
               updatedAt: card.updatedAt,
             }
           : null,
         choiceModeDefault: settings.choiceMode,
+        userPersonas: settings.userPersonas ?? [],
+        defaultUserName: settings.userName,
       })
       return
     }

@@ -30,6 +30,8 @@ import {
 import { PERSONA_SECTION_NAME, personaSectionOrder } from './dsh-compat.ts'
 import { resolveUploadedImagePng } from './uploads.ts'
 import type {} from './service.ts'
+import type { RoleplaySettings } from './settings.ts'
+import type { CharacterCard, SessionBinding } from './cards/types.ts'
 
 export const name = 'roleplay-agent'
 export const inject = ['roleplay', 'systemPrompt', 'tools']
@@ -118,6 +120,23 @@ function calledAskUserQuestion(agent: Agent, turn: number): boolean {
   return false
 }
 
+function resolveUserIdentity(settings: RoleplaySettings, binding?: SessionBinding, card?: CharacterCard): { userName: string; userPersona: string } {
+  const personaId = binding?.userPersonaId || card?.userPersonaId
+  if (personaId && settings.userPersonas) {
+    const persona = settings.userPersonas.find(p => p.id === personaId)
+    if (persona) {
+      return {
+        userName: persona.name.trim() || settings.userName,
+        userPersona: persona.persona.trim() || settings.userPersona,
+      }
+    }
+  }
+  return {
+    userName: settings.userName,
+    userPersona: settings.userPersona,
+  }
+}
+
 export function apply(ctx: Context, config: Config): void {
   const service = () => ctx.roleplay
 
@@ -155,9 +174,10 @@ export function apply(ctx: Context, config: Config): void {
       const agent = agentOf(context)
       const binding = agent ? svc.getBinding(String(agent.id)) : undefined
       const card = binding?.characterId ? svc.getCard(binding.characterId, binding.workspacePath) : undefined
-      const parts = [roleplayStandingRules(settings.userName)]
+      const identity = resolveUserIdentity(settings, binding, card)
+      const parts = [roleplayStandingRules(identity.userName)]
       if (card) {
-        parts.push(characterSection(card, settings.userName, settings.userPersona, recentText(agent), binding?.greetingIndex))
+        parts.push(characterSection(card, identity.userName, identity.userPersona, recentText(agent), binding?.greetingIndex))
       } else {
         parts.push(unboundHint())
       }
@@ -177,7 +197,8 @@ export function apply(ctx: Context, config: Config): void {
     const binding = agent ? svc.getBinding(String(agent.id)) : undefined
     const card = binding?.characterId ? svc.getCard(binding.characterId, binding.workspacePath) : undefined
     if (!card) return undefined
-    return { card, groups: selectLore(card.book, recentText(agent)), userName: svc.settings.get().userName }
+    const identity = resolveUserIdentity(svc.settings.get(), binding, card)
+    return { card, groups: selectLore(card.book, recentText(agent)), userName: identity.userName }
   }
   ctx.systemPrompt.context({
     name: 'roleplay:lore-depth',
@@ -239,7 +260,8 @@ export function apply(ctx: Context, config: Config): void {
       const binding = agent ? svc.getBinding(String(agent.id)) : undefined
       const card = binding?.characterId ? svc.getCard(binding.characterId, binding.workspacePath) : undefined
       if (!card) return ''
-      return cardPostHistoryContext(card, svc.settings.get().userName)
+      const identity = resolveUserIdentity(svc.settings.get(), binding, card)
+      return cardPostHistoryContext(card, identity.userName)
     },
   })
 
@@ -370,6 +392,15 @@ function registerForgeTools(ctx: Context): void {
           },
         },
       },
+      user_persona: {
+        type: 'object',
+        description: '可选：为该剧本专属设定的玩家身份。若剧本对玩家有特定人设或玩家指定了身份，可提供此项自动创建并绑定到该卡。',
+        additionalProperties: false,
+        properties: {
+          name: { type: 'string', required: true, description: '玩家角色名（如“勇者”、“指挥官”、“师尊”）' },
+          persona: { type: 'string', description: '玩家背景人设描述' },
+        },
+      },
     },
     output: {
       schema: {
@@ -378,6 +409,7 @@ function registerForgeTools(ctx: Context): void {
         properties: {
           card_id: { type: 'string', required: true },
           name: { type: 'string', required: true },
+          bound_user_persona: { type: 'string' },
           avatar_url: { type: 'string' },
           previous_avatar_image_id: { type: 'string' },
           // Where the card landed, for the client's card view: the store
@@ -389,6 +421,7 @@ function registerForgeTools(ctx: Context): void {
       render: (_args, value) => [{
         type: 'text',
         text: `角色卡「${value.name}」已保存（id: ${value.card_id}）。`
+          + (value.bound_user_persona ? `已自动创建并绑定配套玩家身份「${value.bound_user_persona}」。` : '')
           + (value.previous_avatar_image_id
             ? `原头像已自动备份（image_id: ${value.previous_avatar_image_id}）；用户想换回原头像时，把它作为 avatar_image_id 再保存一次即可。`
             : '')
@@ -405,6 +438,24 @@ function registerForgeTools(ctx: Context): void {
       if (args.card_id && !existing) throw new Error(`卡片 ${args.card_id} 不存在`)
       const nextName = args.name ?? existing?.name
       if (!nextName) throw new Error('新建卡片必须提供 name')
+      let boundPersonaId: string | undefined
+      let boundPersonaName: string | undefined
+      if (args.user_persona && args.user_persona.name?.trim()) {
+        const currentPersonas = [...(svc.settings.get().userPersonas ?? [])]
+        const pName = args.user_persona.name.trim()
+        const pDesc = (args.user_persona.persona ?? '').trim()
+        const found = currentPersonas.find(p => p.name === pName && p.persona === pDesc)
+        if (found) {
+          boundPersonaId = found.id
+          boundPersonaName = found.name
+        } else {
+          const newId = crypto.randomUUID()
+          currentPersonas.push({ id: newId, name: pName, persona: pDesc })
+          await svc.settings.update({ userPersonas: currentPersonas })
+          boundPersonaId = newId
+          boundPersonaName = pName
+        }
+      }
       const regexScripts = args.regex_scripts?.map(script => ({
         name: script.name,
         find: script.find,
@@ -440,6 +491,7 @@ function registerForgeTools(ctx: Context): void {
         ...(args.tags !== undefined ? { tags: args.tags } : {}),
         ...(regexScripts !== undefined ? { regexScripts } : {}),
         ...(book !== undefined ? { book } : {}),
+        ...(boundPersonaId ? { userPersonaId: boundPersonaId } : {}),
       }, { store: svc.settings.get().cardStore, wsPath })
       let previousAvatarImageId: string | undefined
       if (args.avatar_upload_index !== undefined || args.avatar_image_id) {
@@ -456,6 +508,7 @@ function registerForgeTools(ctx: Context): void {
       return {
         card_id: card.id,
         name: card.name,
+        ...(boundPersonaName ? { bound_user_persona: boundPersonaName } : {}),
         ...(avatarUrl ? { avatar_url: avatarUrl } : {}),
         ...(previousAvatarImageId ? { previous_avatar_image_id: previousAvatarImageId } : {}),
         ...(scope === 'workspace' && wsPath ? { workspace_path: wsPath } : {}),

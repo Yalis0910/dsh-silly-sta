@@ -18,11 +18,15 @@ import z from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-settings'
 import type {} from '@deepseek-ai/cordis-plugin-loader'
 
+import type { UserPersona } from './cards/types.ts'
+
 export interface RoleplaySettings {
   /** Display name used for the player and substituted for the user macro. */
   userName: string
   /** Optional player persona injected below the character definition. */
   userPersona: string
+  /** Stored user personas library. */
+  userPersonas: UserPersona[]
   /** When enabled, role-play sessions see the filesystem tools (read/search/write/edit). */
   allowFileTools: boolean
   /** When enabled, role-play sessions see the web-search tool (search only, no page fetch). */
@@ -42,6 +46,7 @@ type SettingsKey = keyof RoleplaySettings
 const fields = {
   userName: z.string().default('你'),
   userPersona: z.string().default(''),
+  userPersonas: z.array(z.any()).default([]),
   allowFileTools: z.boolean().default(false),
   allowWebTools: z.boolean().default(false),
   workspaceSubfolder: z.string().default('.silly-sta'),
