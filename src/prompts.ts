@@ -147,6 +147,9 @@ export function selectLore(book: LoreEntry[], recentText: string): LoreGroups {
   const fired = book.filter(entry => {
     if (!entry.enabled) return false
     if (entry.constant) return true
+    if (typeof entry.probability === 'number' && entry.probability < 100) {
+      if (Math.random() * 100 > entry.probability) return false
+    }
     if (entry.keys.length === 0) return false
     return entry.keys.some(key => {
       if (entry.useRegex) {

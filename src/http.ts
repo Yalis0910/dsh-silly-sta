@@ -246,6 +246,8 @@ async function route(req: IncomingMessage, res: ServerResponse, service: Rolepla
         id: c.id,
         name: c.name,
         avatarUrl: service.avatarUrl(c, service.cardScope(c.id, cardWs), cardWs) ?? null,
+        firstMessage: c.firstMessage,
+        alternateGreetings: c.alternateGreetings,
         updatedAt: c.updatedAt,
       })) : []
       sendJson(res, 200, {

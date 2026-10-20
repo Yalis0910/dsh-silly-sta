@@ -535,6 +535,10 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
       await api.updateSession(targetSessionId, {
         mode,
         characterId: cardId,
+        groupCardIds: [cardId],
+        activeSpeakerId: null,
+        customOpening: null,
+        greetingIndex: 0,
         userPersonaId: selectedCard?.userPersonaId ?? null,
         ...(wsPath ? { workspacePath: wsPath } : {}),
       })
@@ -581,8 +585,8 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
     })
   }, [state?.groupCards, state?.binding?.groupCardIds, state?.binding?.characterId, state?.card, cards])
 
-  const activeSpeakerId = state?.binding?.activeSpeakerId ?? state?.binding?.characterId
-  const activeSpeaker = isGroup ? groupCards.find(c => c.id === activeSpeakerId) ?? groupCards[0] : null
+  const activeSpeakerId = state?.binding?.activeSpeakerId ?? null
+  const activeSpeaker = isGroup && activeSpeakerId ? (groupCards.find(c => c.id === activeSpeakerId) ?? null) : null
 
   const currentGroupIds = state?.binding?.groupCardIds && state.binding.groupCardIds.length > 0
     ? state.binding.groupCardIds
@@ -636,9 +640,10 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
   }, [sessionId, state, reload])
 
   const setSpeaker = useCallback(async (cardId: string | null) => {
-    await api.updateSession(sessionId, { activeSpeakerId: cardId })
+    const nextSpeaker = state?.binding?.activeSpeakerId === cardId ? null : cardId
+    await api.updateSession(sessionId, { activeSpeakerId: nextSpeaker })
     reload()
-  }, [sessionId, reload])
+  }, [sessionId, state?.binding?.activeSpeakerId, reload])
 
   const setSpeakerMode = useCallback(async (speakerMode: 'auto' | 'round_robin' | 'manual') => {
     await api.updateSession(sessionId, { speakerMode })
@@ -703,7 +708,12 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
         <div className="rp-dock-row">
           <span className="rp-name">{mode === 'forge' ? t('rp.dock.forge.title') : t('rp.dock.rp.title')}</span>
           <span className="rp-muted">{mode === 'forge' ? t('rp.dock.forge.pick') : t('rp.dock.pick')}</span>
-          {error ? <span className="rp-error">{error}</span> : null}
+          {error ? (
+          <span className="rp-error" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <span>{error}</span>
+            <button type="button" onClick={() => setError('')} style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: '0 2px', fontSize: 13, lineHeight: 1 }}>×</button>
+          </span>
+        ) : null}
         </div>
         {cards === null ? (
           <span className="rp-muted">{t('rp.dock.loading')}</span>
@@ -826,7 +836,12 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
       type="button"
       className="rp-btn"
       onClick={() => {
-        void api.updateSession(sessionId, { characterId: null }).then(() => { setCards(null); reload() }).catch(() => {})
+        void api.updateSession(sessionId, {
+          characterId: null,
+          groupCardIds: [],
+          activeSpeakerId: null,
+          customOpening: null,
+        }).then(() => { setCards(null); reload() }).catch(() => {})
       }}
     >
       {isForge ? t('rp.dock.switchCard') : t('rp.dock.switchChar')}
@@ -840,7 +855,7 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
           <div className="rp-group-roster">
             <span className="rp-muted" style={{ fontSize: 12, marginRight: 2 }}>{t('rp.dock.group.title')}:</span>
             {groupCards.map(member => {
-              const isSpeaker = member.id === (activeSpeakerId ?? groupCards[0]?.id)
+              const isSpeaker = Boolean(activeSpeakerId && member.id === activeSpeakerId)
               return (
                 <div
                   key={member.id}
@@ -916,7 +931,7 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
             <div className="rp-group-roster">
               <span className="rp-muted" style={{ fontSize: 12, marginRight: 2 }}>{t('rp.dock.group.title')}:</span>
               {groupCards.map(member => {
-                const isSpeaker = member.id === (activeSpeakerId ?? groupCards[0]?.id)
+                const isSpeaker = Boolean(activeSpeakerId && member.id === activeSpeakerId)
                 return (
                   <div
                     key={member.id}
@@ -1077,7 +1092,12 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
             fusing={fusingOpening}
           />
         ) : null}
-        {error ? <span className="rp-error">{error}</span> : null}
+        {error ? (
+          <span className="rp-error" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <span>{error}</span>
+            <button type="button" onClick={() => setError('')} style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: '0 2px', fontSize: 13, lineHeight: 1 }}>×</button>
+          </span>
+        ) : null}
       </div>
       {questionBar}
       {openingHolder && (bound.firstMessage || (isGroup && state.binding?.customOpening)) ? createPortal(

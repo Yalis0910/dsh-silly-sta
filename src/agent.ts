@@ -93,6 +93,10 @@ function agentOf(context: AssembleContext): Agent | undefined {
   return (context as AssembleContext & { agent?: Agent }).agent
 }
 
+function wsOf(binding?: { workspacePath?: string | null | undefined }): string | undefined {
+  return binding?.workspacePath ?? undefined
+}
+
 /**
  * This session's event log.
  *
@@ -121,7 +125,11 @@ function calledAskUserQuestion(agent: Agent, turn: number): boolean {
   return false
 }
 
-function resolveUserIdentity(settings: RoleplaySettings, binding?: SessionBinding, card?: CharacterCard): { userName: string; userPersona: string } {
+function resolveUserIdentity(
+  settings: RoleplaySettings,
+  binding?: { userPersonaId?: string | null | undefined },
+  card?: { userPersonaId?: string | null | undefined },
+): { userName: string; userPersona: string } {
   const personaId = binding?.userPersonaId || card?.userPersonaId
   if (personaId && settings.userPersonas) {
     const persona = settings.userPersonas.find(p => p.id === personaId)
@@ -156,7 +164,7 @@ export function apply(ctx: Context, config: Config): void {
         const svc = service()
         const agent = agentOf(context)
         const binding = agent ? svc.getBinding(String(agent.id)) : undefined
-        const card = binding?.characterId ? svc.getCard(binding.characterId, binding.workspacePath) : undefined
+        const card = binding?.characterId ? svc.getCard(binding.characterId, wsOf(binding)) : undefined
         if (!card) return ''
         return escapeBraces(forgeBoundCardSection(card))
       },
@@ -175,7 +183,7 @@ export function apply(ctx: Context, config: Config): void {
       const agent = agentOf(context)
       const binding = agent ? svc.getBinding(String(agent.id)) : undefined
       const isGroup = (binding?.groupCardIds?.length ?? 0) >= 2
-      const cards = binding ? svc.resolveGroupCards(binding, binding.workspacePath) : []
+      const cards = binding ? svc.resolveGroupCards(binding, wsOf(binding)) : []
       const activeCard = binding?.activeSpeakerId
         ? (cards.find(c => c.id === binding.activeSpeakerId) ?? cards[0])
         : cards[0]
@@ -183,7 +191,7 @@ export function apply(ctx: Context, config: Config): void {
       const parts = [roleplayStandingRules(identity.userName)]
 
       if (isGroup && cards.length >= 2) {
-        const allLore = svc.resolveGroupAllLore(cards, binding?.workspacePath)
+        const allLore = svc.resolveGroupAllLore(cards, wsOf(binding))
         parts.push(groupCharacterSection(
           cards,
           binding?.activeSpeakerId,
@@ -195,7 +203,7 @@ export function apply(ctx: Context, config: Config): void {
         ))
       } else if (cards.length > 0) {
         const card = cards[0]!
-        const allLore = svc.resolveCardAllLore(card, binding?.workspacePath)
+        const allLore = svc.resolveCardAllLore(card, wsOf(binding))
         parts.push(characterSection(card, identity.userName, identity.userPersona, recentText(agent), binding?.greetingIndex, allLore))
       } else {
         parts.push(unboundHint())
@@ -216,13 +224,13 @@ export function apply(ctx: Context, config: Config): void {
     const binding = agent ? svc.getBinding(String(agent.id)) : undefined
     if (!binding) return undefined
     const isGroup = (binding.groupCardIds?.length ?? 0) >= 2
-    const cards = svc.resolveGroupCards(binding, binding.workspacePath)
+    const cards = svc.resolveGroupCards(binding, wsOf(binding))
     if (cards.length === 0) return undefined
     const activeCard = binding.activeSpeakerId
       ? (cards.find(c => c.id === binding.activeSpeakerId) ?? cards[0]!)
       : cards[0]!
     const identity = resolveUserIdentity(svc.settings.get(), binding, activeCard)
-    const allLore = isGroup ? svc.resolveGroupAllLore(cards, binding.workspacePath) : svc.resolveCardAllLore(activeCard, binding.workspacePath)
+    const allLore = isGroup ? svc.resolveGroupAllLore(cards, wsOf(binding)) : svc.resolveCardAllLore(activeCard, wsOf(binding))
     return { card: activeCard, groups: selectLore(allLore, recentText(agent)), userName: identity.userName }
   }
   ctx.systemPrompt.context({
@@ -271,7 +279,7 @@ export function apply(ctx: Context, config: Config): void {
       const binding = agent ? svc.getBinding(String(agent.id)) : undefined
       const memory = binding?.storyMemory?.trim()
       if (!memory) return ''
-      const card = binding?.characterId ? svc.getCard(binding.characterId, binding.workspacePath) : undefined
+      const card = binding?.characterId ? svc.getCard(binding.characterId, wsOf(binding)) : undefined
       const identity = resolveUserIdentity(svc.settings.get(), binding, card)
       return `[剧情核心备忘录]\n以下是此前剧情确立的核心事实、重大承诺与关键现状，必须严格遵守，保持情节前后连贯：\n${applyMacros(memory, card?.name ?? '', identity.userName)}`
     },
@@ -298,7 +306,7 @@ export function apply(ctx: Context, config: Config): void {
       const agent = agentOf(context)
       const binding = agent ? svc.getBinding(String(agent.id)) : undefined
       if (!binding) return ''
-      const cards = svc.resolveGroupCards(binding, binding.workspacePath)
+      const cards = svc.resolveGroupCards(binding, wsOf(binding))
       const activeCard = binding.activeSpeakerId
         ? (cards.find(c => c.id === binding.activeSpeakerId) ?? cards[0])
         : cards[0]
@@ -312,58 +320,74 @@ export function apply(ctx: Context, config: Config): void {
   // user message exactly as the interchange convention writes it
   // (`\n\n[系统指令: …]` on the message itself), then cleared — the durable
   // log carries the direction with the message it steered.
+  // Also handles group chat speaker targeting (`【对XXX说】`) and round-robin alternation.
   ctx.on('agent/pre-step', async (payload, next) => {
     const decision = await next()
     if (decision.kind !== 'enter') return decision
     const svc = service()
     const sessionId = String(payload.agent.id)
-    const instruction = svc.getBinding(sessionId)?.pendingInstruction?.trim()
-    if (!instruction) return decision
+    const binding = svc.getBinding(sessionId)
+
     let index = -1
     for (let i = decision.messages.length - 1; i >= 0; i--) {
-      const source = decision.messages[i]?.source as { kind?: string } | undefined
-      if (source?.kind === 'user') { index = i; break }
+      const msg = decision.messages[i]
+      const source = msg?.source as { kind?: string } | undefined
+      if (source?.kind === 'user' || (msg as any)?.role === 'user') { index = i; break }
     }
     if (index < 0) return decision
+
     const original = decision.messages[index]!
-    const content = [...original.content]
-    const last = content[content.length - 1]
-    const suffix = `\n\n[系统指令: ${instruction}]`
-    if (last && (last as { type?: string }).type === 'text') {
-      content[content.length - 1] = { ...(last as object), text: `${(last as { text?: string }).text ?? ''}${suffix}` } as typeof last
-    } else {
-      content.push({ type: 'text', text: suffix.trimStart() } as (typeof content)[number])
-    }
-    const binding = svc.getBinding(sessionId)
-    if (binding && binding.groupCardIds && binding.groupCardIds.length >= 2) {
-      let userText = ''
-      for (const block of content) {
-        if (block && typeof block === 'object' && (block as any).type === 'text') {
-          userText += (block as any).text ?? ''
-        }
+    let userText = ''
+    for (const block of original.content) {
+      if (block && typeof block === 'object' && (block as any).type === 'text') {
+        userText += (block as any).text ?? ''
       }
+    }
+
+    // ── Group Chat: Speaker rotation & targeting ──
+    if (binding && binding.groupCardIds && binding.groupCardIds.length >= 2) {
       const match = userText.match(/【对\s*([^】]+?)\s*(?:说|讲|问)?】/)
       if (match) {
         const targetName = match[1]!.trim().toLowerCase()
-        const cards = svc.resolveGroupCards(binding, binding.workspacePath)
-        const found = cards.find(c => c.name.toLowerCase() === targetName || c.name.toLowerCase().includes(targetName))
+        const cards = svc.resolveGroupCards(binding, wsOf(binding))
+        const found = cards.find(c => c.name.toLowerCase() === targetName || c.name.toLowerCase().includes(targetName) || targetName.includes(c.name.toLowerCase()))
         if (found && found.id !== binding.activeSpeakerId) {
-          void svc.updateBinding(sessionId, { activeSpeakerId: found.id }).catch(() => {})
+          try {
+            await svc.updateBinding(sessionId, { activeSpeakerId: found.id })
+          } catch {}
         }
       } else if (binding.speakerMode === 'round_robin') {
         const ids = binding.groupCardIds
         const currentIdx = ids.indexOf(binding.activeSpeakerId ?? '')
         const nextId = ids[(currentIdx + 1) % ids.length]
-        if (nextId) {
-          void svc.updateBinding(sessionId, { activeSpeakerId: nextId }).catch(() => {})
+        if (nextId && nextId !== binding.activeSpeakerId) {
+          try {
+            await svc.updateBinding(sessionId, { activeSpeakerId: nextId })
+          } catch {}
         }
       }
     }
 
-    const messages = [...decision.messages]
-    messages[index] = { ...original, content } as typeof original
-    void svc.updateBinding(sessionId, { pendingInstruction: null }).catch(() => {})
-    return { kind: 'enter' as const, messages }
+    // ── One-shot Stage Direction ──
+    const instruction = binding?.pendingInstruction?.trim()
+    if (instruction) {
+      const content = [...original.content]
+      const last = content[content.length - 1]
+      const suffix = `\n\n[系统指令: ${instruction}]`
+      if (last && (last as { type?: string }).type === 'text') {
+        content[content.length - 1] = { ...(last as object), text: `${(last as { text?: string }).text ?? ''}${suffix}` } as typeof last
+      } else {
+        content.push({ type: 'text', text: suffix.trimStart() } as (typeof content)[number])
+      }
+      const messages = [...decision.messages]
+      messages[index] = { ...original, content } as typeof original
+      try {
+        await svc.updateBinding(sessionId, { pendingInstruction: null })
+      } catch {}
+      return { kind: 'enter' as const, messages }
+    }
+
+    return decision
   })
 
   // Choice-mode enforcement: with the toggle on, a turn that is about to stop
@@ -502,7 +526,7 @@ function registerForgeTools(ctx: Context): void {
     async execute(args, exec) {
       const svc = ctx.roleplay
       const agentId = exec.agent ? String(exec.agent.id) : undefined
-      const wsPath = agentId ? svc.getBinding(agentId)?.workspacePath : undefined
+      const wsPath = wsOf(agentId ? svc.getBinding(agentId) : undefined)
       const existing = args.card_id ? svc.getCard(args.card_id, wsPath) : undefined
       if (args.card_id && !existing) throw new Error(`卡片 ${args.card_id} 不存在`)
       const nextName = args.name ?? existing?.name
@@ -609,7 +633,7 @@ function registerForgeTools(ctx: Context): void {
     },
     async execute(_args, exec) {
       const agentId = exec.agent ? String(exec.agent.id) : undefined
-      const wsPath = agentId ? ctx.roleplay.getBinding(agentId)?.workspacePath : undefined
+      const wsPath = wsOf(agentId ? ctx.roleplay.getBinding(agentId) : undefined)
       return ctx.roleplay.listCards(wsPath).map(card => ({ id: card.id, name: card.name, tags: card.tags }))
     },
   }))
@@ -626,7 +650,7 @@ function registerForgeTools(ctx: Context): void {
     },
     async execute(args, exec) {
       const agentId = exec.agent ? String(exec.agent.id) : undefined
-      const wsPath = agentId ? ctx.roleplay.getBinding(agentId)?.workspacePath : undefined
+      const wsPath = wsOf(agentId ? ctx.roleplay.getBinding(agentId) : undefined)
       const card = ctx.roleplay.getCard(args.card_id, wsPath)
       if (!card) throw new Error(`卡片 ${args.card_id} 不存在`)
       return card as unknown as JsonValue

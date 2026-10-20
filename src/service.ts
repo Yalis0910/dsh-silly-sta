@@ -97,7 +97,7 @@ export class RoleplayService extends Service {
   // knows the current workspace; sessions record theirs on the binding).
 
   /** Root of a workspace's role-play data, or undefined for unusable paths. */
-  wsRoot(wsPath: string | undefined): string | undefined {
+  wsRoot(wsPath: string | null | undefined): string | undefined {
     if (!wsPath || !isAbsolute(wsPath) || !existsSync(wsPath)) return undefined
     const sub = this.settings.get().workspaceSubfolder.trim() || '.silly-sta'
     if (sub.split(/[\\/]/).some(part => part === '' || part === '.' || part === '..')) return undefined
@@ -174,7 +174,7 @@ export class RoleplayService extends Service {
 
 
   /** Find a card and where it lives; global wins over the workspace on id collisions. */
-  locateCard(id: string, wsPath?: string): { card: CharacterCard; scope: StoreScope; root?: string } | undefined {
+  locateCard(id: string, wsPath?: string | null): { card: CharacterCard; scope: StoreScope; root?: string } | undefined {
     const global = this.domain.table('cards').get(id)
     if (global) return { card: RoleplayService.backfillCard(global), scope: 'global' }
     const root = this.wsRoot(wsPath)
@@ -287,11 +287,11 @@ export class RoleplayService extends Service {
     return [...global, ...workspace]
   }
 
-  getCard(id: string, wsPath?: string): CharacterCard | undefined {
+  getCard(id: string, wsPath?: string | null): CharacterCard | undefined {
     return this.locateCard(id, wsPath)?.card
   }
 
-  cardScope(id: string, wsPath?: string): StoreScope | undefined {
+  cardScope(id: string, wsPath?: string | null): StoreScope | undefined {
     return this.locateCard(id, wsPath)?.scope
   }
 
@@ -519,7 +519,7 @@ export class RoleplayService extends Service {
 
   // ── lorebooks ─────────────────────────────────────────────────────────────
 
-  locateLorebook(id: string, wsPath?: string): { book: StandaloneLorebook; scope: StoreScope; root?: string } | undefined {
+  locateLorebook(id: string, wsPath?: string | null): { book: StandaloneLorebook; scope: StoreScope; root?: string } | undefined {
     const global = this.domain.table('lorebooks').get(id)
     if (global) return { book: global, scope: 'global' }
     const root = this.wsRoot(wsPath)
@@ -530,7 +530,7 @@ export class RoleplayService extends Service {
     return undefined
   }
 
-  listLorebooks(wsPath?: string): (StandaloneLorebook & { scope: StoreScope })[] {
+  listLorebooks(wsPath?: string | null): (StandaloneLorebook & { scope: StoreScope })[] {
     const global = [...this.domain.table('lorebooks').entries()]
       .map(([, book]) => ({ ...book, scope: 'global' as const }))
       .sort((a, b) => b.createdAt - a.createdAt)
@@ -541,11 +541,11 @@ export class RoleplayService extends Service {
     return [...global, ...workspace]
   }
 
-  getLorebook(id: string, wsPath?: string): StandaloneLorebook | undefined {
+  getLorebook(id: string, wsPath?: string | null): StandaloneLorebook | undefined {
     return this.locateLorebook(id, wsPath)?.book
   }
 
-  lorebookScope(id: string, wsPath?: string): StoreScope | undefined {
+  lorebookScope(id: string, wsPath?: string | null): StoreScope | undefined {
     return this.locateLorebook(id, wsPath)?.scope
   }
 
@@ -604,7 +604,7 @@ export class RoleplayService extends Service {
    * Resolves all lore entries for a character card, merging its own entries with
    * all entries from mounted standalone lorebooks.
    */
-  resolveCardAllLore(card: CharacterCard, wsPath?: string): LoreEntry[] {
+  resolveCardAllLore(card: CharacterCard, wsPath?: string | null): LoreEntry[] {
     const ownEntries = card.book ?? []
     if (!card.lorebookIds || card.lorebookIds.length === 0) return ownEntries
     const all = [...ownEntries]
@@ -625,7 +625,7 @@ export class RoleplayService extends Service {
 
   async updateBinding(
     sessionId: string,
-    patch: Partial<Omit<SessionBinding, 'characterId' | 'userPersonaId' | 'pendingInstruction' | 'authorNote' | 'storyMemory' | 'workspacePath' | 'customOpening' | 'activeSpeakerId'>> & {
+    patch: Partial<Omit<SessionBinding, 'characterId' | 'userPersonaId' | 'pendingInstruction' | 'authorNote' | 'storyMemory' | 'workspacePath' | 'customOpening' | 'activeSpeakerId' | 'choiceMode'>> & {
       characterId?: string | null
       userPersonaId?: string | null
       /** null clears the staged one-shot instruction. */
@@ -641,6 +641,8 @@ export class RoleplayService extends Service {
       customOpening?: string | null
       /** null clears the designated active speaker. */
       activeSpeakerId?: string | null
+      /** null reverts per-session choice mode to global setting. */
+      choiceMode?: boolean | null
     },
   ): Promise<SessionBinding> {
     const existing = this.getBinding(sessionId)
@@ -652,7 +654,7 @@ export class RoleplayService extends Service {
       updatedAt: Date.now(),
     }
     // null = "remove the override": the schema keeps these keys absent.
-    for (const key of ['characterId', 'userPersonaId', 'pendingInstruction', 'authorNote', 'storyMemory', 'workspacePath', 'customOpening', 'activeSpeakerId'] as const) {
+    for (const key of ['characterId', 'userPersonaId', 'pendingInstruction', 'authorNote', 'storyMemory', 'workspacePath', 'customOpening', 'activeSpeakerId', 'choiceMode'] as const) {
       if (merged[key] === null || merged[key] === '') delete merged[key]
     }
     const next = SessionBinding.parse(merged)
@@ -912,7 +914,7 @@ export class RoleplayService extends Service {
     return moved
   }
 
-  resolveGroupCards(binding: SessionBinding, wsPath?: string): CharacterCard[] {
+  resolveGroupCards(binding: SessionBinding, wsPath?: string | null): CharacterCard[] {
     const cardIds = binding.groupCardIds && binding.groupCardIds.length > 0
       ? binding.groupCardIds
       : (binding.characterId ? [binding.characterId] : [])
@@ -925,7 +927,7 @@ export class RoleplayService extends Service {
     return cards
   }
 
-  resolveGroupAllLore(cards: CharacterCard[], wsPath?: string): LoreEntry[] {
+  resolveGroupAllLore(cards: CharacterCard[], wsPath?: string | null): LoreEntry[] {
     const seen = new Set<string>()
     const entries: LoreEntry[] = []
     for (const card of cards) {
@@ -947,11 +949,17 @@ export class RoleplayService extends Service {
     if (latest?.provider && latest?.model) return { provider: latest.provider, model: latest.model }
     const options = agent?.options
     if (options?.provider && options?.model) return { provider: options.provider, model: options.model }
+    const dshSettings = (this.ctx.get('settings') as any)?.get?.()
+    if (dshSettings?.provider && dshSettings?.model) {
+      return { provider: dshSettings.provider, model: dshSettings.model }
+    }
     const llm = this.ctx.get('llm') as any
     const providers = llm?.listProviders?.() ?? []
     for (const p of providers) {
       if (p.models && p.models.length > 0) {
-        return { provider: p.id, model: p.models[0].id }
+        const m = p.models[0]
+        const modelId = typeof m === 'object' && m !== null ? m.id : String(m)
+        if (modelId) return { provider: p.id, model: modelId }
       }
     }
     return undefined
@@ -983,7 +991,7 @@ export class RoleplayService extends Service {
     return result.slice(-count)
   }
 
-  async generateRecap(sessionId: string, wsPath?: string): Promise<{ recap: string }> {
+  async generateRecap(sessionId: string, wsPath?: string | null): Promise<{ recap: string }> {
     const target = this.resolveModelTarget(sessionId)
     if (!target) throw new Error('未找到可用的模型配置进行总结')
     const recent = this.getSessionRecentMessages(sessionId, 25)
@@ -1030,7 +1038,7 @@ ${dialogueText}`
     return { recap: text }
   }
 
-  async fuseGroupGreetings(sessionId: string, wsPath?: string): Promise<{ opening: string }> {
+  async fuseGroupGreetings(sessionId: string, wsPath?: string | null): Promise<{ opening: string }> {
     const binding = this.getBinding(sessionId)
     if (!binding) throw new Error('会话不存在')
     const cards = this.resolveGroupCards(binding, wsPath)
@@ -1080,7 +1088,7 @@ ${charSnippets}
     return { opening: text }
   }
 
-  async inspectSessionPrompt(sessionId: string, wsPath?: string): Promise<PromptInspectionReport> {
+  async inspectSessionPrompt(sessionId: string, wsPath?: string | null): Promise<PromptInspectionReport> {
     const binding = this.getBinding(sessionId) ?? {
       sessionId,
       mode: 'roleplay' as const,

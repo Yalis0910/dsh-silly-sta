@@ -182,8 +182,8 @@ export function createSettingsStore(ctx: Context, live: LiveSettings): SettingsS
 
 export function resolveUserIdentity(
   settings: RoleplaySettings,
-  binding?: { userPersonaId?: string | undefined },
-  card?: { userPersonaId?: string | undefined },
+  binding?: { userPersonaId?: string | null | undefined },
+  card?: { userPersonaId?: string | null | undefined },
 ): { userName: string; userPersona: string } {
   const personaId = binding?.userPersonaId || card?.userPersonaId
   if (personaId && settings.userPersonas) {

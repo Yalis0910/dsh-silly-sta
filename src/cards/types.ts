@@ -111,8 +111,8 @@ export const CharacterCard = z.object({
   /** Card-carried regex scripts (display coloring on the client). */
   regexScripts: z.array(RegexScript).default([]),
   /** Optional player persona ID assigned to this character. */
-  userPersonaId: z.string().optional(),
-  avatar: z.string().optional(),
+  userPersonaId: z.string().nullable().optional(),
+  avatar: z.string().nullable().optional(),
   favorite: z.boolean().default(false),
   createdAt: z.number().int().default(0),
   updatedAt: z.number().int().default(0),
@@ -134,7 +134,7 @@ export type SpeakerMode = (typeof SPEAKER_MODES)[number]
 export const SessionBinding = z.object({
   sessionId: z.string(),
   mode: z.enum(['roleplay', 'forge']),
-  characterId: z.string().optional(),
+  characterId: z.string().nullable().optional(),
   /** Member character IDs when this session is in group chat mode (2+ characters). */
   groupCardIds: z.array(z.string()).default([]),
   /** Currently designated active speaker character ID (or undefined for auto/all). */
@@ -144,19 +144,19 @@ export const SessionBinding = z.object({
   /** AI-synthesized or custom fused opening scene for group chat. */
   customOpening: z.string().nullable().optional(),
   /** Active player persona ID for this session (overrides card default). */
-  userPersonaId: z.string().optional(),
+  userPersonaId: z.string().nullable().optional(),
   /** One-shot stage direction appended to the NEXT user message, then cleared. */
-  pendingInstruction: z.string().optional(),
+  pendingInstruction: z.string().nullable().optional(),
   /** Persistent scene direction / mood / atmosphere (Author's Note), active across turns until cleared. */
-  authorNote: z.string().optional(),
+  authorNote: z.string().nullable().optional(),
   /** Persistent story milestones, promises, secrets and facts to prevent long-term forgetting. */
-  storyMemory: z.string().optional(),
+  storyMemory: z.string().nullable().optional(),
   /** Selected opening greeting index: 0 = firstMessage, 1..N = alternateGreetings[index - 1]. */
   greetingIndex: z.number().int().min(0).default(0),
   /** Filesystem path of the session's workspace (recorded by the dock; used for workspace-scoped stores). */
-  workspacePath: z.string().optional(),
+  workspacePath: z.string().nullable().optional(),
   /** Per-session override of the global choice-mode default. */
-  choiceMode: z.boolean().optional(),
+  choiceMode: z.boolean().nullable().optional(),
   updatedAt: z.number().int().default(0),
 })
 export type SessionBinding = z.infer<typeof SessionBinding>
