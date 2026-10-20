@@ -127,6 +127,7 @@ type BoundCard = NonNullable<SessionState['card']>
 function OpeningBubble({
   card,
   customOpening,
+  isGroup = false,
   rules,
   greetingIndex = 0,
   onSwitchGreeting,
@@ -138,6 +139,7 @@ function OpeningBubble({
 }: {
   card: BoundCard
   customOpening?: string | null
+  isGroup?: boolean
   rules: readonly CardColorRule[]
   greetingIndex?: number
   onSwitchGreeting?: (index: number) => void
@@ -152,7 +154,7 @@ function OpeningBubble({
   const userName = propUserName || fallbackUserName
   const allGreetings = useMemo(() => [card.firstMessage, ...(card.alternateGreetings ?? [])].filter(Boolean), [card])
   const activeIndex = Math.min(Math.max(0, greetingIndex), Math.max(0, allGreetings.length - 1))
-  const isCustom = Boolean(customOpening && customOpening.trim() !== '')
+  const isCustom = Boolean(isGroup && customOpening && customOpening.trim() !== '')
   const message = isCustom ? customOpening! : (allGreetings[activeIndex] ?? card.firstMessage)
 
   return (
@@ -239,6 +241,7 @@ function OpeningBubble({
 function OpeningInline({
   card,
   customOpening,
+  isGroup = false,
   rules,
   greetingIndex = 0,
   onSwitchGreeting,
@@ -249,6 +252,7 @@ function OpeningInline({
 }: {
   card: BoundCard
   customOpening?: string | null
+  isGroup?: boolean
   rules: readonly CardColorRule[]
   greetingIndex?: number
   onSwitchGreeting?: (index: number) => void
@@ -262,7 +266,7 @@ function OpeningInline({
   const t = useT()
   const allGreetings = useMemo(() => [card.firstMessage, ...(card.alternateGreetings ?? [])].filter(Boolean), [card])
   const activeIndex = Math.min(Math.max(0, greetingIndex), Math.max(0, allGreetings.length - 1))
-  const isCustom = Boolean(customOpening && customOpening.trim() !== '')
+  const isCustom = Boolean(isGroup && customOpening && customOpening.trim() !== '')
   const message = isCustom ? customOpening! : (allGreetings[activeIndex] ?? card.firstMessage)
 
   return (
@@ -606,11 +610,15 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
     if (!state?.binding) return
     const current = (state.binding.groupCardIds ?? []).filter(id => id !== cardId)
     const nextSpeaker = state.binding.activeSpeakerId === cardId ? (current[0] ?? null) : state.binding.activeSpeakerId
-    await api.updateSession(sessionId, {
+    const patch: Parameters<typeof api.updateSession>[1] = {
       groupCardIds: current,
       characterId: current[0] ?? null,
       activeSpeakerId: nextSpeaker,
-    })
+    }
+    if (current.length < 2) {
+      patch.customOpening = null
+    }
+    await api.updateSession(sessionId, patch)
     reload()
   }, [sessionId, state, reload])
 
@@ -622,6 +630,7 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
       characterId: hostId,
       activeSpeakerId: null,
       speakerMode: 'auto',
+      customOpening: null,
     })
     reload()
   }, [sessionId, state, reload])
@@ -1054,32 +1063,34 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
             onClose={() => setActiveTray('none')}
           />
         ) : null}
-        {blank && (bound.firstMessage || state.binding?.customOpening) ? (
+        {blank && (bound.firstMessage || (isGroup && state.binding?.customOpening)) ? (
           <OpeningInline
             card={bound}
             customOpening={state.binding?.customOpening}
+            isGroup={isGroup}
             rules={cardRules}
             greetingIndex={activeGreetingIndex}
             onSwitchGreeting={switchGreeting}
             userName={effectiveUserName}
             onFuseOpening={isGroup ? fuseOpening : undefined}
-            onRevertOpening={isGroup && state.binding?.customOpening ? revertOpening : undefined}
+            onRevertOpening={revertOpening}
             fusing={fusingOpening}
           />
         ) : null}
         {error ? <span className="rp-error">{error}</span> : null}
       </div>
       {questionBar}
-      {openingHolder && (bound.firstMessage || state.binding?.customOpening) ? createPortal(
+      {openingHolder && (bound.firstMessage || (isGroup && state.binding?.customOpening)) ? createPortal(
         <OpeningBubble
           card={bound}
           customOpening={state.binding?.customOpening}
+          isGroup={isGroup}
           rules={cardRules}
           greetingIndex={activeGreetingIndex}
           onSwitchGreeting={switchGreeting}
           userName={effectiveUserName}
           onFuseOpening={isGroup ? fuseOpening : undefined}
-          onRevertOpening={isGroup && state.binding?.customOpening ? revertOpening : undefined}
+          onRevertOpening={revertOpening}
           fusing={fusingOpening}
         />,
         openingHolder

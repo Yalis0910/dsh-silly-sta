@@ -625,8 +625,9 @@ export class RoleplayService extends Service {
 
   async updateBinding(
     sessionId: string,
-    patch: Partial<Omit<SessionBinding, 'characterId' | 'pendingInstruction' | 'authorNote' | 'storyMemory' | 'workspacePath'>> & {
+    patch: Partial<Omit<SessionBinding, 'characterId' | 'userPersonaId' | 'pendingInstruction' | 'authorNote' | 'storyMemory' | 'workspacePath' | 'customOpening' | 'activeSpeakerId'>> & {
       characterId?: string | null
+      userPersonaId?: string | null
       /** null clears the staged one-shot instruction. */
       pendingInstruction?: string | null
       /** null clears the persistent Author's Note. */
@@ -636,6 +637,10 @@ export class RoleplayService extends Service {
       greetingIndex?: number
       /** null forgets the recorded workspace path. */
       workspacePath?: string | null
+      /** null clears the fused group opening. */
+      customOpening?: string | null
+      /** null clears the designated active speaker. */
+      activeSpeakerId?: string | null
     },
   ): Promise<SessionBinding> {
     const existing = this.getBinding(sessionId)
@@ -647,7 +652,7 @@ export class RoleplayService extends Service {
       updatedAt: Date.now(),
     }
     // null = "remove the override": the schema keeps these keys absent.
-    for (const key of ['characterId', 'userPersonaId', 'pendingInstruction', 'authorNote', 'storyMemory', 'workspacePath'] as const) {
+    for (const key of ['characterId', 'userPersonaId', 'pendingInstruction', 'authorNote', 'storyMemory', 'workspacePath', 'customOpening', 'activeSpeakerId'] as const) {
       if (merged[key] === null || merged[key] === '') delete merged[key]
     }
     const next = SessionBinding.parse(merged)

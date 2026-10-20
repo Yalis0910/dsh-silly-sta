@@ -218,11 +218,11 @@ export function characterSection(
 /** The multi-character group stage block injected for a group chat session. */
 export function groupCharacterSection(
   cards: CharacterCard[],
-  activeSpeakerId: string | undefined,
+  activeSpeakerId: string | null | undefined,
   userName: string,
   userPersona: string,
   recentText: string,
-  fusedOpening?: string,
+  fusedOpening?: string | null,
   allLore?: LoreEntry[],
 ): string {
   if (cards.length === 0) return ''

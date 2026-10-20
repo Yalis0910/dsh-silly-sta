@@ -138,11 +138,11 @@ export const SessionBinding = z.object({
   /** Member character IDs when this session is in group chat mode (2+ characters). */
   groupCardIds: z.array(z.string()).default([]),
   /** Currently designated active speaker character ID (or undefined for auto/all). */
-  activeSpeakerId: z.string().optional(),
+  activeSpeakerId: z.string().nullable().optional(),
   /** Speaker alternation strategy in group mode. */
   speakerMode: z.enum(SPEAKER_MODES).default('auto'),
   /** AI-synthesized or custom fused opening scene for group chat. */
-  customOpening: z.string().optional(),
+  customOpening: z.string().nullable().optional(),
   /** Active player persona ID for this session (overrides card default). */
   userPersonaId: z.string().optional(),
   /** One-shot stage direction appended to the NEXT user message, then cleared. */
