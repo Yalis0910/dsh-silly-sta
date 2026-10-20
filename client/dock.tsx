@@ -124,7 +124,18 @@ function useOpeningHolder(active: boolean): HTMLElement | null {
 type BoundCard = NonNullable<SessionState['card']>
 
 /** The bound card's opening message as a character bubble (macros resolved, prose colored). */
-function OpeningBubble({ card, customOpening, rules, greetingIndex = 0, onSwitchGreeting, canSwitch = true, userName: propUserName, onFuseOpening, fusing }: {
+function OpeningBubble({
+  card,
+  customOpening,
+  rules,
+  greetingIndex = 0,
+  onSwitchGreeting,
+  canSwitch = true,
+  userName: propUserName,
+  onFuseOpening,
+  onRevertOpening,
+  fusing,
+}: {
   card: BoundCard
   customOpening?: string | null
   rules: readonly CardColorRule[]
@@ -133,6 +144,7 @@ function OpeningBubble({ card, customOpening, rules, greetingIndex = 0, onSwitch
   canSwitch?: boolean
   userName?: string
   onFuseOpening?: () => void
+  onRevertOpening?: () => void
   fusing?: boolean
 }): React.ReactNode {
   const t = useT()
@@ -140,7 +152,8 @@ function OpeningBubble({ card, customOpening, rules, greetingIndex = 0, onSwitch
   const userName = propUserName || fallbackUserName
   const allGreetings = useMemo(() => [card.firstMessage, ...(card.alternateGreetings ?? [])].filter(Boolean), [card])
   const activeIndex = Math.min(Math.max(0, greetingIndex), Math.max(0, allGreetings.length - 1))
-  const message = (customOpening && customOpening.trim() !== '') ? customOpening : (allGreetings[activeIndex] ?? card.firstMessage)
+  const isCustom = Boolean(customOpening && customOpening.trim() !== '')
+  const message = isCustom ? customOpening! : (allGreetings[activeIndex] ?? card.firstMessage)
 
   return (
     <div className="rp-opening">
@@ -148,46 +161,74 @@ function OpeningBubble({ card, customOpening, rules, greetingIndex = 0, onSwitch
         <Avatar url={card.avatarUrl ? stampedUrl(card.avatarUrl, card.updatedAt) : null} name={card.name} />
         <span className="rp-opening-name">{card.name}</span>
         <span className="rp-opening-tag">{t('rp.opening.tag')}</span>
-        {customOpening ? (
-          <span className="rp-scope-tag rp-scope-global" style={{ marginLeft: 6, fontSize: 11 }}>
-            🪄 {t('rp.dock.group.fusedOpening')}
-          </span>
-        ) : null}
-        {allGreetings.length > 1 && canSwitch ? (
-          <div className="rp-greeting-switcher">
-            <button
-              type="button"
-              className="rp-greeting-btn"
-              disabled={activeIndex <= 0}
-              onClick={() => onSwitchGreeting?.(activeIndex - 1)}
-              title={t('rp.greeting.prev')}
-            >
-              ‹
-            </button>
-            <span className="rp-greeting-count">{activeIndex + 1} / {allGreetings.length}</span>
-            <button
-              type="button"
-              className="rp-greeting-btn"
-              disabled={activeIndex >= allGreetings.length - 1}
-              onClick={() => onSwitchGreeting?.(activeIndex + 1)}
-              title={t('rp.greeting.next')}
-            >
-              ›
-            </button>
-          </div>
-        ) : null}
-        {onFuseOpening ? (
-          <button
-            type="button"
-            className="rp-btn-subtle"
-            style={{ fontSize: 11, marginLeft: 6 }}
-            disabled={fusing}
-            onClick={onFuseOpening}
-            title="让 AI 将全员的开场情境无缝融合为同一时空的群戏开局"
-          >
-            {fusing ? t('rp.dock.group.fusing') : t('rp.dock.group.fusedOpening')}
-          </button>
-        ) : null}
+        {isCustom ? (
+          <>
+            <span className="rp-scope-tag rp-scope-global" style={{ marginLeft: 6, fontSize: 11 }}>
+              🪄 {t('rp.dock.group.fusedOpening')}
+            </span>
+            {onRevertOpening ? (
+              <button
+                type="button"
+                className="rp-btn-subtle"
+                style={{ fontSize: 11, marginLeft: 6 }}
+                onClick={onRevertOpening}
+                title={t('rp.dock.group.revertOpeningTitle')}
+              >
+                ↩️ {t('rp.dock.group.revertOpening')}
+              </button>
+            ) : null}
+            {onFuseOpening ? (
+              <button
+                type="button"
+                className="rp-btn-subtle"
+                style={{ fontSize: 11, marginLeft: 6 }}
+                disabled={fusing}
+                onClick={onFuseOpening}
+                title="让 AI 重新融合生成新的群聊开场"
+              >
+                {fusing ? t('rp.dock.group.fusing') : `🪄 ${t('rp.dock.group.refuseOpening')}`}
+              </button>
+            ) : null}
+          </>
+        ) : (
+          <>
+            {allGreetings.length > 1 && canSwitch ? (
+              <div className="rp-greeting-switcher">
+                <button
+                  type="button"
+                  className="rp-greeting-btn"
+                  disabled={activeIndex <= 0}
+                  onClick={() => onSwitchGreeting?.(activeIndex - 1)}
+                  title={t('rp.greeting.prev')}
+                >
+                  ‹
+                </button>
+                <span className="rp-greeting-count">{activeIndex + 1} / {allGreetings.length}</span>
+                <button
+                  type="button"
+                  className="rp-greeting-btn"
+                  disabled={activeIndex >= allGreetings.length - 1}
+                  onClick={() => onSwitchGreeting?.(activeIndex + 1)}
+                  title={t('rp.greeting.next')}
+                >
+                  ›
+                </button>
+              </div>
+            ) : null}
+            {onFuseOpening ? (
+              <button
+                type="button"
+                className="rp-btn-subtle"
+                style={{ fontSize: 11, marginLeft: 6 }}
+                disabled={fusing}
+                onClick={onFuseOpening}
+                title="让 AI 将全员的开场情境无缝融合为同一时空的群戏开局"
+              >
+                {fusing ? t('rp.dock.group.fusing') : `🪄 ${t('rp.dock.group.fuse')}`}
+              </button>
+            ) : null}
+          </>
+        )}
       </div>
       <div className="rp-opening-body">{colorizeProse(replaceMacros(message, card.name, userName), rules)}</div>
     </div>
@@ -195,7 +236,17 @@ function OpeningBubble({ card, customOpening, rules, greetingIndex = 0, onSwitch
 }
 
 /** Compact opening preview inside the dock (blank sessions, before the first send). */
-function OpeningInline({ card, customOpening, rules, greetingIndex = 0, onSwitchGreeting, userName: propUserName, onFuseOpening, fusing }: {
+function OpeningInline({
+  card,
+  customOpening,
+  rules,
+  greetingIndex = 0,
+  onSwitchGreeting,
+  userName: propUserName,
+  onFuseOpening,
+  onRevertOpening,
+  fusing,
+}: {
   card: BoundCard
   customOpening?: string | null
   rules: readonly CardColorRule[]
@@ -203,6 +254,7 @@ function OpeningInline({ card, customOpening, rules, greetingIndex = 0, onSwitch
   onSwitchGreeting?: (index: number) => void
   userName?: string
   onFuseOpening?: () => void
+  onRevertOpening?: () => void
   fusing?: boolean
 }): React.ReactNode {
   const fallbackUserName = useUserName()
@@ -210,53 +262,85 @@ function OpeningInline({ card, customOpening, rules, greetingIndex = 0, onSwitch
   const t = useT()
   const allGreetings = useMemo(() => [card.firstMessage, ...(card.alternateGreetings ?? [])].filter(Boolean), [card])
   const activeIndex = Math.min(Math.max(0, greetingIndex), Math.max(0, allGreetings.length - 1))
-  const message = (customOpening && customOpening.trim() !== '') ? customOpening : (allGreetings[activeIndex] ?? card.firstMessage)
+  const isCustom = Boolean(customOpening && customOpening.trim() !== '')
+  const message = isCustom ? customOpening! : (allGreetings[activeIndex] ?? card.firstMessage)
 
   return (
     <div className="rp-greeting-wrap">
       <div className="rp-greeting-bar" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span className="rp-note">可选开场 ({activeIndex + 1}/{allGreetings.length})</span>
-          {customOpening ? (
+          {isCustom ? (
             <span className="rp-scope-tag rp-scope-global" style={{ fontSize: 11 }}>
               🪄 {t('rp.dock.group.fusedOpening')}
             </span>
-          ) : null}
+          ) : (
+            <span className="rp-note">可选开场 ({activeIndex + 1}/{allGreetings.length})</span>
+          )}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          {allGreetings.length > 1 ? (
-            <div className="rp-greeting-switcher">
-              <button
-                type="button"
-                className="rp-greeting-btn"
-                disabled={activeIndex <= 0}
-                onClick={() => onSwitchGreeting?.(activeIndex - 1)}
-              >
-                ‹
-              </button>
-              <span className="rp-greeting-count">{activeIndex + 1} / {allGreetings.length}</span>
-              <button
-                type="button"
-                className="rp-greeting-btn"
-                disabled={activeIndex >= allGreetings.length - 1}
-                onClick={() => onSwitchGreeting?.(activeIndex + 1)}
-              >
-                ›
-              </button>
-            </div>
-          ) : null}
-          {onFuseOpening ? (
-            <button
-              type="button"
-              className="rp-btn-subtle"
-              style={{ fontSize: 11 }}
-              disabled={fusing}
-              onClick={onFuseOpening}
-              title="让 AI 将全员的开场情境无缝融合为同一时空的群戏开局"
-            >
-              {fusing ? t('rp.dock.group.fusing') : t('rp.dock.group.fusedOpening')}
-            </button>
-          ) : null}
+          {isCustom ? (
+            <>
+              {onRevertOpening ? (
+                <button
+                  type="button"
+                  className="rp-btn-subtle"
+                  style={{ fontSize: 11 }}
+                  onClick={onRevertOpening}
+                  title={t('rp.dock.group.revertOpeningTitle')}
+                >
+                  ↩️ {t('rp.dock.group.revertOpening')}
+                </button>
+              ) : null}
+              {onFuseOpening ? (
+                <button
+                  type="button"
+                  className="rp-btn-subtle"
+                  style={{ fontSize: 11 }}
+                  disabled={fusing}
+                  onClick={onFuseOpening}
+                  title="让 AI 重新融合生成新的群聊开场"
+                >
+                  {fusing ? t('rp.dock.group.fusing') : `🪄 ${t('rp.dock.group.refuseOpening')}`}
+                </button>
+              ) : null}
+            </>
+          ) : (
+            <>
+              {allGreetings.length > 1 ? (
+                <div className="rp-greeting-switcher">
+                  <button
+                    type="button"
+                    className="rp-greeting-btn"
+                    disabled={activeIndex <= 0}
+                    onClick={() => onSwitchGreeting?.(activeIndex - 1)}
+                  >
+                    ‹
+                  </button>
+                  <span className="rp-greeting-count">{activeIndex + 1} / {allGreetings.length}</span>
+                  <button
+                    type="button"
+                    className="rp-greeting-btn"
+                    disabled={activeIndex >= allGreetings.length - 1}
+                    onClick={() => onSwitchGreeting?.(activeIndex + 1)}
+                  >
+                    ›
+                  </button>
+                </div>
+              ) : null}
+              {onFuseOpening ? (
+                <button
+                  type="button"
+                  className="rp-btn-subtle"
+                  style={{ fontSize: 11 }}
+                  disabled={fusing}
+                  onClick={onFuseOpening}
+                  title="让 AI 将全员的开场情境无缝融合为同一时空的群戏开局"
+                >
+                  {fusing ? t('rp.dock.group.fusing') : `🪄 ${t('rp.dock.group.fuse')}`}
+                </button>
+              ) : null}
+            </>
+          )}
         </div>
       </div>
       <div className="rp-greeting">{colorizeProse(replaceMacros(message, card.name, userName), rules)}</div>
@@ -563,6 +647,15 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
       setFusingOpening(false)
     }
   }, [sessionId, wsPath, reload])
+
+  const revertOpening = useCallback(async () => {
+    try {
+      await api.updateSession(sessionId, { customOpening: null })
+      reload()
+    } catch (err) {
+      setError(String(err instanceof Error ? err.message : err))
+    }
+  }, [sessionId, reload])
 
   const choiceMode = state ? (state.binding?.choiceMode ?? state.choiceModeDefault) : false
   const holder = usePendingHolder(pending && mode === 'roleplay' && bound !== null)
@@ -970,6 +1063,7 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
             onSwitchGreeting={switchGreeting}
             userName={effectiveUserName}
             onFuseOpening={isGroup ? fuseOpening : undefined}
+            onRevertOpening={isGroup && state.binding?.customOpening ? revertOpening : undefined}
             fusing={fusingOpening}
           />
         ) : null}
@@ -985,6 +1079,7 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
           onSwitchGreeting={switchGreeting}
           userName={effectiveUserName}
           onFuseOpening={isGroup ? fuseOpening : undefined}
+          onRevertOpening={isGroup && state.binding?.customOpening ? revertOpening : undefined}
           fusing={fusingOpening}
         />,
         openingHolder
