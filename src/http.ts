@@ -242,6 +242,12 @@ async function route(req: IncomingMessage, res: ServerResponse, service: Rolepla
       const cardWs = binding?.workspacePath ?? ws
       const card = binding?.characterId ? service.getCard(binding.characterId, cardWs) : undefined
       const cardScope = binding?.characterId ? service.cardScope(binding.characterId, cardWs) : undefined
+      const groupCards = binding ? service.resolveGroupCards(binding, cardWs).map(c => ({
+        id: c.id,
+        name: c.name,
+        avatarUrl: service.avatarUrl(c, service.cardScope(c.id, cardWs), cardWs) ?? null,
+        updatedAt: c.updatedAt,
+      })) : []
       sendJson(res, 200, {
         binding: binding ?? null,
         card: card
@@ -257,6 +263,7 @@ async function route(req: IncomingMessage, res: ServerResponse, service: Rolepla
               updatedAt: card.updatedAt,
             }
           : null,
+        groupCards,
         choiceModeDefault: settings.choiceMode,
         userPersonas: settings.userPersonas ?? [],
         defaultUserName: settings.userName,

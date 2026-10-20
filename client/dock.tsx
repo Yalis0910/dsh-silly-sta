@@ -124,8 +124,9 @@ function useOpeningHolder(active: boolean): HTMLElement | null {
 type BoundCard = NonNullable<SessionState['card']>
 
 /** The bound card's opening message as a character bubble (macros resolved, prose colored). */
-function OpeningBubble({ card, rules, greetingIndex = 0, onSwitchGreeting, canSwitch = true, userName: propUserName, onFuseOpening, fusing }: {
+function OpeningBubble({ card, customOpening, rules, greetingIndex = 0, onSwitchGreeting, canSwitch = true, userName: propUserName, onFuseOpening, fusing }: {
   card: BoundCard
+  customOpening?: string | null
   rules: readonly CardColorRule[]
   greetingIndex?: number
   onSwitchGreeting?: (index: number) => void
@@ -139,7 +140,7 @@ function OpeningBubble({ card, rules, greetingIndex = 0, onSwitchGreeting, canSw
   const userName = propUserName || fallbackUserName
   const allGreetings = useMemo(() => [card.firstMessage, ...(card.alternateGreetings ?? [])].filter(Boolean), [card])
   const activeIndex = Math.min(Math.max(0, greetingIndex), Math.max(0, allGreetings.length - 1))
-  const message = allGreetings[activeIndex] ?? card.firstMessage
+  const message = (customOpening && customOpening.trim() !== '') ? customOpening : (allGreetings[activeIndex] ?? card.firstMessage)
 
   return (
     <div className="rp-opening">
@@ -147,6 +148,11 @@ function OpeningBubble({ card, rules, greetingIndex = 0, onSwitchGreeting, canSw
         <Avatar url={card.avatarUrl ? stampedUrl(card.avatarUrl, card.updatedAt) : null} name={card.name} />
         <span className="rp-opening-name">{card.name}</span>
         <span className="rp-opening-tag">{t('rp.opening.tag')}</span>
+        {customOpening ? (
+          <span className="rp-scope-tag rp-scope-global" style={{ marginLeft: 6, fontSize: 11 }}>
+            🪄 {t('rp.dock.group.fusedOpening')}
+          </span>
+        ) : null}
         {allGreetings.length > 1 && canSwitch ? (
           <div className="rp-greeting-switcher">
             <button
@@ -159,18 +165,6 @@ function OpeningBubble({ card, rules, greetingIndex = 0, onSwitchGreeting, canSw
               ‹
             </button>
             <span className="rp-greeting-count">{activeIndex + 1} / {allGreetings.length}</span>
-            {onFuseOpening ? (
-              <button
-                type="button"
-                className="rp-btn-subtle"
-                style={{ fontSize: 11, marginLeft: 6 }}
-                disabled={fusing}
-                onClick={onFuseOpening}
-                title="让 AI 将全员的开场情境无缝融合为同一时空的群戏开局"
-              >
-                {fusing ? '融合中…' : '🪄 融合多人开场'}
-              </button>
-            ) : null}
             <button
               type="button"
               className="rp-greeting-btn"
@@ -182,6 +176,18 @@ function OpeningBubble({ card, rules, greetingIndex = 0, onSwitchGreeting, canSw
             </button>
           </div>
         ) : null}
+        {onFuseOpening ? (
+          <button
+            type="button"
+            className="rp-btn-subtle"
+            style={{ fontSize: 11, marginLeft: 6 }}
+            disabled={fusing}
+            onClick={onFuseOpening}
+            title="让 AI 将全员的开场情境无缝融合为同一时空的群戏开局"
+          >
+            {fusing ? t('rp.dock.group.fusing') : t('rp.dock.group.fusedOpening')}
+          </button>
+        ) : null}
       </div>
       <div className="rp-opening-body">{colorizeProse(replaceMacros(message, card.name, userName), rules)}</div>
     </div>
@@ -189,8 +195,9 @@ function OpeningBubble({ card, rules, greetingIndex = 0, onSwitchGreeting, canSw
 }
 
 /** Compact opening preview inside the dock (blank sessions, before the first send). */
-function OpeningInline({ card, rules, greetingIndex = 0, onSwitchGreeting, userName: propUserName, onFuseOpening, fusing }: {
+function OpeningInline({ card, customOpening, rules, greetingIndex = 0, onSwitchGreeting, userName: propUserName, onFuseOpening, fusing }: {
   card: BoundCard
+  customOpening?: string | null
   rules: readonly CardColorRule[]
   greetingIndex?: number
   onSwitchGreeting?: (index: number) => void
@@ -200,48 +207,58 @@ function OpeningInline({ card, rules, greetingIndex = 0, onSwitchGreeting, userN
 }): React.ReactNode {
   const fallbackUserName = useUserName()
   const userName = propUserName || fallbackUserName
+  const t = useT()
   const allGreetings = useMemo(() => [card.firstMessage, ...(card.alternateGreetings ?? [])].filter(Boolean), [card])
   const activeIndex = Math.min(Math.max(0, greetingIndex), Math.max(0, allGreetings.length - 1))
-  const message = allGreetings[activeIndex] ?? card.firstMessage
+  const message = (customOpening && customOpening.trim() !== '') ? customOpening : (allGreetings[activeIndex] ?? card.firstMessage)
 
   return (
     <div className="rp-greeting-wrap">
-      {allGreetings.length > 1 ? (
-        <div className="rp-greeting-bar">
+      <div className="rp-greeting-bar" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <span className="rp-note">可选开场 ({activeIndex + 1}/{allGreetings.length})</span>
-          <div className="rp-greeting-switcher">
-            <button
-              type="button"
-              className="rp-greeting-btn"
-              disabled={activeIndex <= 0}
-              onClick={() => onSwitchGreeting?.(activeIndex - 1)}
-            >
-              ‹
-            </button>
-            <span className="rp-greeting-count">{activeIndex + 1} / {allGreetings.length}</span>
-            {onFuseOpening ? (
+          {customOpening ? (
+            <span className="rp-scope-tag rp-scope-global" style={{ fontSize: 11 }}>
+              🪄 {t('rp.dock.group.fusedOpening')}
+            </span>
+          ) : null}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {allGreetings.length > 1 ? (
+            <div className="rp-greeting-switcher">
               <button
                 type="button"
-                className="rp-btn-subtle"
-                style={{ fontSize: 11, marginLeft: 6 }}
-                disabled={fusing}
-                onClick={onFuseOpening}
-                title="让 AI 将全员的开场情境无缝融合为同一时空的群戏开局"
+                className="rp-greeting-btn"
+                disabled={activeIndex <= 0}
+                onClick={() => onSwitchGreeting?.(activeIndex - 1)}
               >
-                {fusing ? '融合中…' : '🪄 融合多人开场'}
+                ‹
               </button>
-            ) : null}
+              <span className="rp-greeting-count">{activeIndex + 1} / {allGreetings.length}</span>
+              <button
+                type="button"
+                className="rp-greeting-btn"
+                disabled={activeIndex >= allGreetings.length - 1}
+                onClick={() => onSwitchGreeting?.(activeIndex + 1)}
+              >
+                ›
+              </button>
+            </div>
+          ) : null}
+          {onFuseOpening ? (
             <button
               type="button"
-              className="rp-greeting-btn"
-              disabled={activeIndex >= allGreetings.length - 1}
-              onClick={() => onSwitchGreeting?.(activeIndex + 1)}
+              className="rp-btn-subtle"
+              style={{ fontSize: 11 }}
+              disabled={fusing}
+              onClick={onFuseOpening}
+              title="让 AI 将全员的开场情境无缝融合为同一时空的群戏开局"
             >
-              ›
+              {fusing ? t('rp.dock.group.fusing') : t('rp.dock.group.fusedOpening')}
             </button>
-          </div>
+          ) : null}
         </div>
-      ) : null}
+      </div>
       <div className="rp-greeting">{colorizeProse(replaceMacros(message, card.name, userName), rules)}</div>
     </div>
   )
@@ -265,6 +282,72 @@ function usePendingHolder(active: boolean): HTMLElement | null {
     }
   }, [active])
   return holder
+}
+
+function InviteCardTray({
+  availableCards,
+  onPick,
+  onClose,
+}: {
+  availableCards: CardSummary[]
+  onPick: (cardId: string) => void
+  onClose: () => void
+}): React.ReactNode {
+  const t = useT()
+  const [filter, setFilter] = useState('')
+  const filtered = useMemo(() => {
+    const q = filter.trim().toLowerCase()
+    if (!q) return availableCards
+    return availableCards.filter(c => c.name.toLowerCase().includes(q) || (c.creatorNotes ?? '').toLowerCase().includes(q))
+  }, [availableCards, filter])
+
+  return (
+    <div className="rp-tray-panel" style={{ maxHeight: 380, overflowY: 'auto' }}>
+      <div className="rp-tray-header">
+        <span className="rp-tray-title">👥 {t('rp.dock.group.inviteCard')}</span>
+        <div className="rp-tray-actions">
+          {availableCards.length > 4 ? (
+            <input
+              type="text"
+              value={filter}
+              onChange={e => setFilter(e.target.value)}
+              placeholder="搜索角色…"
+              className="rp-input"
+              style={{ width: 120, fontSize: 12, padding: '2px 6px' }}
+            />
+          ) : null}
+          <button type="button" className="rp-popover-close" onClick={onClose} title="关闭">×</button>
+        </div>
+      </div>
+      {availableCards.length === 0 ? (
+        <span className="rp-muted" style={{ padding: '16px 0', textAlign: 'center', fontSize: 12 }}>
+          暂无更多可邀请的角色，请先在角色卡管理中导入或创建更多角色卡。
+        </span>
+      ) : (
+        <div className="rp-cardgrid" style={{ maxHeight: 260, overflowY: 'auto', padding: '4px 0' }}>
+          {filtered.map(card => (
+            <button
+              key={`${card.scope}-${card.id}`}
+              type="button"
+              className="rp-cardcell"
+              onClick={() => onPick(card.id)}
+            >
+              <Avatar url={card.avatarUrl ? stampedUrl(card.avatarUrl, card.updatedAt) : null} name={card.name} />
+              <span className="rp-cardcell-text">
+                <span className="rp-cardname">
+                  <span className={`rp-scope-tag rp-scope-${card.scope}`}>
+                    {card.scope === 'global' ? t('rp.scope.global') : t('rp.scope.workspace')}
+                  </span>
+                  {card.favorite ? '★ ' : ''}{card.name}
+                </span>
+                <span className="rp-cardnote">{card.creatorNotes || card.description || `${card.bookEntries}${t('rp.cards.lore')}`}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }
 
 function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }: {
@@ -375,6 +458,13 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
   const activeSpeakerId = state?.binding?.activeSpeakerId ?? state?.binding?.characterId
   const activeSpeaker = isGroup ? groupCards.find(c => c.id === activeSpeakerId) ?? groupCards[0] : null
 
+  const currentGroupIds = state?.binding?.groupCardIds && state.binding.groupCardIds.length > 0
+    ? state.binding.groupCardIds
+    : (state?.binding?.characterId ? [state.binding.characterId] : [])
+  const availableCards = useMemo(() => {
+    return (cards ?? []).filter(c => !currentGroupIds.includes(c.id))
+  }, [cards, currentGroupIds])
+
   const addMember = useCallback(async (cardId: string) => {
     if (!state?.binding) return
     const current = state.binding.groupCardIds && state.binding.groupCardIds.length > 0
@@ -385,6 +475,7 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
     await api.updateSession(sessionId, {
       groupCardIds: current,
       characterId: current[0] ?? null,
+      activeSpeakerId: state.binding.activeSpeakerId ?? current[0] ?? null,
     })
     reload()
   }, [sessionId, state, reload])
@@ -392,10 +483,11 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
   const removeMember = useCallback(async (cardId: string) => {
     if (!state?.binding) return
     const current = (state.binding.groupCardIds ?? []).filter(id => id !== cardId)
+    const nextSpeaker = state.binding.activeSpeakerId === cardId ? (current[0] ?? null) : state.binding.activeSpeakerId
     await api.updateSession(sessionId, {
       groupCardIds: current,
       characterId: current[0] ?? null,
-      activeSpeakerId: state.binding.activeSpeakerId === cardId ? null : undefined,
+      activeSpeakerId: nextSpeaker,
     })
     reload()
   }, [sessionId, state, reload])
@@ -603,6 +695,7 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
         {storyMemoryButton}
         {authorNoteButton}
         {stagedInstructionButton}
+        {inspectorButton}
         {continueButton}
         {switchButton}
       </div>
@@ -610,6 +703,7 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
         <MemoryTray
           sessionId={sessionId}
           memory={state.binding?.storyMemory ?? ''}
+          wsPath={wsPath}
           reload={reload}
           onClose={() => setActiveTray('none')}
         />
@@ -630,6 +724,13 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
           onClose={() => setActiveTray('none')}
         />
       ) : null}
+      {activeTray === 'inspector' ? (
+        <InspectorTray
+          sessionId={sessionId}
+          wsPath={wsPath}
+          onClose={() => setActiveTray('none')}
+        />
+      ) : null}
     </div>,
     holder,
   ) : null
@@ -637,11 +738,93 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
   return (
     <>
       <div className="rp-dock">
+        {isGroup && !isForge ? (
+          <div className="rp-dock-group-row">
+            <div className="rp-group-roster">
+              <span className="rp-muted" style={{ fontSize: 12, marginRight: 2 }}>{t('rp.dock.group.title')}:</span>
+              {groupCards.map(member => {
+                const isSpeaker = member.id === (activeSpeakerId ?? groupCards[0]?.id)
+                return (
+                  <div
+                    key={member.id}
+                    className={`rp-group-pill${isSpeaker ? ' rp-speaker-active' : ''}`}
+                    onClick={() => void setSpeaker(member.id)}
+                    title={isSpeaker ? t('rp.dock.group.activeSpeaker') : t('rp.dock.group.clickToSpeak')}
+                  >
+                    <Avatar url={member.avatarUrl ? stampedUrl(member.avatarUrl, member.updatedAt) : null} name={member.name} />
+                    <span>{member.name}</span>
+                    {isSpeaker ? <span className="rp-group-crown">👑</span> : null}
+                    {groupCards.length > 1 ? (
+                      <span
+                        className="rp-group-remove"
+                        title={t('rp.dock.group.remove')}
+                        onClick={e => {
+                          e.stopPropagation()
+                          void removeMember(member.id)
+                        }}
+                      >
+                        ×
+                      </span>
+                    ) : null}
+                  </div>
+                )
+              })}
+              <button
+                type="button"
+                className="rp-btn-subtle"
+                onClick={() => setInviteOpen(prev => !prev)}
+                title={t('rp.dock.group.inviteCard')}
+              >
+                ➕ {t('rp.dock.group.invite')}
+              </button>
+            </div>
+
+            <span className="rp-spacer" />
+
+            <div className="rp-group-controls" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <select
+                className="rp-persona-select"
+                value={state.binding?.speakerMode ?? 'auto'}
+                onChange={e => void setSpeakerMode(e.target.value as any)}
+                title={t('rp.dock.group.mode')}
+              >
+                <option value="auto">{t('rp.dock.group.mode.auto')}</option>
+                <option value="round_robin">{t('rp.dock.group.mode.roundRobin')}</option>
+                <option value="manual">{t('rp.dock.group.mode.manual')}</option>
+              </select>
+
+              {activeSpeaker ? (
+                <button
+                  type="button"
+                  className="rp-btn-subtle rp-btn-talk-to"
+                  onClick={() => {
+                    inputActions.setDraft(`【对${activeSpeaker.name}说】 `)
+                  }}
+                  title={tf(t('rp.dock.group.talkTo'), { name: activeSpeaker.name })}
+                >
+                  🗣️ 对{activeSpeaker.name}说
+                </button>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+
         <div className="rp-dock-row rp-dock-row-oneline">
           <Avatar url={boundAvatar} name={bound.name} />
           <Tooltip label={bound.name} side="bottom">
             <span className="rp-name">{bound.name}</span>
           </Tooltip>
+          {!isForge && !isGroup ? (
+            <button
+              type="button"
+              className="rp-btn-subtle"
+              style={{ fontSize: 12, padding: '2px 8px', marginLeft: 4 }}
+              onClick={() => setInviteOpen(prev => !prev)}
+              title={t('rp.dock.group.inviteCard')}
+            >
+              ➕ {t('rp.dock.group.invite')}
+            </button>
+          ) : null}
           {personaSelect}
           {isForge ? <span className="rp-muted">{t('rp.dock.forge.editing')}</span> : null}
           <span className="rp-spacer" />
@@ -649,17 +832,31 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
           {storyMemoryButton}
           {authorNoteButton}
           {stagedInstructionButton}
+          {inspectorButton}
           {continueButton}
           {switchButton}
         </div>
+
+        {inviteOpen ? (
+          <InviteCardTray
+            availableCards={availableCards}
+            onPick={cardId => {
+              void addMember(cardId)
+              setInviteOpen(false)
+            }}
+            onClose={() => setInviteOpen(false)}
+          />
+        ) : null}
+
         {activeTray === 'memory' ? (
-        <MemoryTray
-          sessionId={sessionId}
-          memory={state.binding?.storyMemory ?? ''}
-          reload={reload}
-          onClose={() => setActiveTray('none')}
-        />
-      ) : null}
+          <MemoryTray
+            sessionId={sessionId}
+            memory={state.binding?.storyMemory ?? ''}
+            wsPath={wsPath}
+            reload={reload}
+            onClose={() => setActiveTray('none')}
+          />
+        ) : null}
         {activeTray === 'instruction' ? (
           <InstructionTray
             sessionId={sessionId}
@@ -676,25 +873,38 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
             onClose={() => setActiveTray('none')}
           />
         ) : null}
-        {blank && bound.firstMessage ? (
+        {activeTray === 'inspector' ? (
+          <InspectorTray
+            sessionId={sessionId}
+            wsPath={wsPath}
+            onClose={() => setActiveTray('none')}
+          />
+        ) : null}
+        {blank && (bound.firstMessage || state.binding?.customOpening) ? (
           <OpeningInline
             card={bound}
+            customOpening={state.binding?.customOpening}
             rules={cardRules}
             greetingIndex={activeGreetingIndex}
             onSwitchGreeting={switchGreeting}
             userName={effectiveUserName}
+            onFuseOpening={isGroup ? fuseOpening : undefined}
+            fusing={fusingOpening}
           />
         ) : null}
         {error ? <span className="rp-error">{error}</span> : null}
       </div>
       {questionBar}
-      {openingHolder && bound.firstMessage ? createPortal(
+      {openingHolder && (bound.firstMessage || state.binding?.customOpening) ? createPortal(
         <OpeningBubble
           card={bound}
+          customOpening={state.binding?.customOpening}
           rules={cardRules}
           greetingIndex={activeGreetingIndex}
           onSwitchGreeting={switchGreeting}
           userName={effectiveUserName}
+          onFuseOpening={isGroup ? fuseOpening : undefined}
+          fusing={fusingOpening}
         />,
         openingHolder
       ) : null}
