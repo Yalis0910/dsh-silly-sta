@@ -34,6 +34,11 @@ export interface GroupCardSummary {
   updatedAt: number
 }
 
+export interface SwipeTurnValue {
+  index: number
+  variants: string[]
+}
+
 export interface SessionState {
   binding: {
     mode: string
@@ -48,6 +53,7 @@ export interface SessionState {
     authorNote?: string
     storyMemory?: string
     greetingIndex?: number
+    swipes?: Record<string, SwipeTurnValue>
     workspacePath?: string
   } | null
   card: {
@@ -276,7 +282,7 @@ export const api = {
     mode?: string
     characterId?: string | null
     userPersonaId?: string | null
-    choiceMode?: boolean
+    choiceMode?: boolean | null
     /** One-shot stage direction sent with the next message; null clears it. */
     pendingInstruction?: string | null
     /** Persistent scene direction or author's note; null clears it. */
@@ -285,6 +291,8 @@ export const api = {
     storyMemory?: string | null
     /** Currently selected greeting index for the session. */
     greetingIndex?: number
+    /** Per-turn swipe candidates and active branch index. */
+    swipes?: Record<string, SwipeTurnValue>
     /** The session's workspace path (recorded by the dock); null forgets it. */
     workspacePath?: string | null
     groupCardIds?: string[]

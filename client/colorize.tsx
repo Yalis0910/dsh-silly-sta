@@ -20,7 +20,7 @@ const SAY_RE = /『[^『』\n]*』|「[^「」\n]*」|“[^“”\n]*”/g
 /** Inner thoughts: full-width （…） (half-width stays plain — too common in code/links). */
 const THINK_RE = /（[^（）\n]*）/g
 /** Speaker prefix in group chat: 【…】 */
-const SPEAKER_RE = /(?:^|\n)(?:【[^】\n]+】)/g
+const SPEAKER_RE = /(?:^|\n)\s*(【[^】\n]+】)/g
 
 /** Replace the card macros with live names (client-side mirror of the host's applyMacros). */
 export function replaceMacros(text: string, charName: string, userName: string): string {
@@ -117,6 +117,11 @@ function matchSpan(match: RegExpMatchArray, group: number): [number, number] | u
 
 function segmentsOf(text: string, rules: readonly CardColorRule[]): Segment[] {
   const segments: Segment[] = []
+  for (const match of text.matchAll(SPEAKER_RE)) {
+    const raw = match[1] ?? match[0]
+    const start = (match.index ?? 0) + match[0].indexOf(raw)
+    segments.push({ start, end: start + raw.length, className: 'rp-speaker' })
+  }
   for (const match of text.matchAll(SAY_RE)) {
     segments.push({ start: match.index ?? 0, end: (match.index ?? 0) + match[0].length, className: 'rp-say' })
   }
@@ -198,8 +203,10 @@ export function startProseHighlighter(cardRules: readonly CardColorRule[] = []):
 
   const say = new HighlightCtor()
   const think = new HighlightCtor()
+  const speaker = new HighlightCtor()
   registry.set('rp-say', say as unknown)
   registry.set('rp-think', think as unknown)
+  registry.set('rp-speaker', speaker as unknown)
 
   const cardHighlights = cardRules.map((rule, index) => {
     const highlight = new HighlightCtor()
@@ -216,6 +223,14 @@ export function startProseHighlighter(cardRules: readonly CardColorRule[] = []):
   }
 
   const collect = (node: Text, text: string) => {
+    for (const match of text.matchAll(SPEAKER_RE)) {
+      const raw = match[1] ?? match[0]
+      const offset = (match.index ?? 0) + match[0].indexOf(raw)
+      const range = new Range()
+      range.setStart(node, offset)
+      range.setEnd(node, offset + raw.length)
+      speaker.add(range)
+    }
     for (const match of text.matchAll(SAY_RE)) {
       const range = new Range()
       range.setStart(node, match.index ?? 0)
@@ -244,6 +259,7 @@ export function startProseHighlighter(cardRules: readonly CardColorRule[] = []):
   const rescan = () => {
     say.clear()
     think.clear()
+    speaker.clear()
     for (const highlight of cardHighlights) highlight.clear()
     for (const step of document.querySelectorAll('[data-chat-flow-kind="assistant-step"]')) {
       const walker = document.createTreeWalker(step, NodeFilter.SHOW_TEXT)
@@ -271,6 +287,7 @@ export function startProseHighlighter(cardRules: readonly CardColorRule[] = []):
     if (timer !== undefined) window.clearTimeout(timer)
     registry.delete('rp-say')
     registry.delete('rp-think')
+    registry.delete('rp-speaker')
     cardHighlights.forEach((_, index) => registry.delete(`rp-card-${index}`))
     style?.remove()
   }

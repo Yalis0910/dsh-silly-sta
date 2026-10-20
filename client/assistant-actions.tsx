@@ -5,6 +5,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { IconRefreshOutlineRegular, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
+import { api } from './api.ts'
 import { rewindAndResend } from './runtime.ts'
 import { turnOf, useAgentPreset, useChatFlow, useSessionRunning, type ChatFlow, type SessionSlotProps } from './compat.ts'
 import { useT } from './i18n.ts'
@@ -98,12 +99,42 @@ export function RoleplayAssistantActions(props: ActionProps): ReactNode {
     return swipeKey ? loadSwipe(swipeKey) : { index: 0, variants: [] }
   })
 
-  // Sync swipe on key changes
+  // Sync swipe on key changes & re-pull from session binding for durable persistence
   useEffect(() => {
     if (swipeKey) {
       setSwipe(loadSwipe(swipeKey))
     }
-  }, [swipeKey])
+    if (!props.sessionId || !context?.turn) return
+    let active = true
+    api.session(props.sessionId)
+      .then(st => {
+        if (!active) return
+        const turnKey = String(context.turn)
+        const saved = st.binding?.swipes?.[turnKey]
+        if (saved && Array.isArray(saved.variants) && saved.variants.length > 0) {
+          setSwipe(prev => {
+            const mergedVariants = Array.from(new Set([...saved.variants, ...prev.variants]))
+            const next = { index: saved.index < mergedVariants.length ? saved.index : prev.index, variants: mergedVariants }
+            if (swipeKey) saveSwipe(swipeKey, next)
+            return next
+          })
+        }
+      })
+      .catch(() => {})
+    return () => { active = false }
+  }, [props.sessionId, context?.turn, swipeKey])
+
+  const persistSwipe = useCallback((nextState: SwipeState) => {
+    if (!props.sessionId || !context?.turn) return
+    const turnKey = String(context.turn)
+    api.session(props.sessionId)
+      .then(st => {
+        const currentSwipes = st.binding?.swipes ? { ...st.binding.swipes } : {}
+        currentSwipes[turnKey] = nextState
+        return api.updateSession(props.sessionId as string, { swipes: currentSwipes })
+      })
+      .catch(() => {})
+  }, [props.sessionId, context?.turn])
 
   // Capture current prose text once generation completes
   useEffect(() => {
@@ -118,6 +149,7 @@ export function RoleplayAssistantActions(props: ActionProps): ReactNode {
           if (idx !== prev.index) {
             const next = { ...prev, index: idx }
             saveSwipe(swipeKey, next)
+            persistSwipe(next)
             return next
           }
           return prev
@@ -125,11 +157,12 @@ export function RoleplayAssistantActions(props: ActionProps): ReactNode {
         const nextVariants = [...prev.variants, currentHtml]
         const next = { index: nextVariants.length - 1, variants: nextVariants }
         saveSwipe(swipeKey, next)
+        persistSwipe(next)
         return next
       })
     }, 100)
     return () => clearTimeout(timer)
-  }, [running, swipeKey, preset])
+  }, [running, swipeKey, preset, persistSwipe])
 
   const handleSwitch = useCallback((targetIndex: number) => {
     if (!swipeKey || targetIndex < 0 || targetIndex >= swipe.variants.length) return
@@ -141,7 +174,8 @@ export function RoleplayAssistantActions(props: ActionProps): ReactNode {
     const next = { ...swipe, index: targetIndex }
     setSwipe(next)
     saveSwipe(swipeKey, next)
-  }, [swipe, swipeKey])
+    persistSwipe(next)
+  }, [swipe, swipeKey, persistSwipe])
 
   const handleReroll = useCallback(() => {
     if (!context || context.prevTurnEnd === undefined || context.userText.trim() === '' || running || busy !== false) return
@@ -152,13 +186,14 @@ export function RoleplayAssistantActions(props: ActionProps): ReactNode {
         const nextVariants = prev.variants.includes(currentHtml) ? prev.variants : [...prev.variants, currentHtml]
         const nextState = { index: nextVariants.length, variants: nextVariants }
         saveSwipe(swipeKey, nextState)
+        persistSwipe(nextState)
         return nextState
       })
     }
     setBusy('reply')
     rewindAndResend(props.sessionId as string, context.prevTurnEnd as number, context.userText)
       .catch(() => setBusy(false))
-  }, [context, running, busy, swipeKey, props.sessionId])
+  }, [context, running, busy, swipeKey, props.sessionId, persistSwipe])
 
   if (preset !== 'roleplay' || !context) return null
 

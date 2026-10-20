@@ -66,27 +66,46 @@ declare module '@deepseek-ai/dsh-llm' {
   }
 }
 
-/** Concatenated text of the last few derived messages, for lore keyword scans. */
-function recentText(agent: Agent | undefined): string {
-  if (!agent) return ''
+function htmlToText(html: string): string {
+  if (!html) return ''
+  return html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>\s*<p[^>]*>/gi, '\n\n')
+    .replace(/<[^>]+>/g, '')
+    .replaceAll('&nbsp;', ' ')
+    .replaceAll('&lt;', '<')
+    .replaceAll('&gt;', '>')
+    .replaceAll('&amp;', '&')
+    .trim()
+}
+
+function recentMessagesList(agent: Agent | undefined, maxCount = 30): string[] {
+  if (!agent) return []
   try {
     const texts: string[] = []
-    for (const message of agent.session.deriveMessages().slice(-6)) {
+    for (const message of agent.session.deriveMessages().slice(-maxCount)) {
       const content = (message as { content?: unknown }).content
       if (typeof content === 'string') {
-        texts.push(content)
+        const t = content.trim()
+        if (t) texts.push(t)
       } else if (Array.isArray(content)) {
         for (const block of content) {
           if (block && typeof block === 'object' && (block as { type?: string }).type === 'text') {
-            texts.push(String((block as { text?: unknown }).text ?? ''))
+            const t = String((block as { text?: unknown }).text ?? '').trim()
+            if (t) texts.push(t)
           }
         }
       }
     }
-    return texts.join('\n')
+    return texts
   } catch {
-    return ''
+    return []
   }
+}
+
+/** Concatenated text of the last few derived messages, for lore keyword scans. */
+function recentText(agent: Agent | undefined, count = 6): string {
+  return recentMessagesList(agent, count).join('\n')
 }
 
 function agentOf(context: AssembleContext): Agent | undefined {
@@ -190,6 +209,9 @@ export function apply(ctx: Context, config: Config): void {
       const identity = resolveUserIdentity(settings, binding, activeCard)
       const parts = [roleplayStandingRules(identity.userName)]
 
+      const recentMsgs = recentMessagesList(agent, 30)
+      const seed = String(agent?.session?.deriveMessages?.().length ?? 0)
+
       if (isGroup && cards.length >= 2) {
         const allLore = svc.resolveGroupAllLore(cards, wsOf(binding))
         parts.push(groupCharacterSection(
@@ -197,14 +219,15 @@ export function apply(ctx: Context, config: Config): void {
           binding?.activeSpeakerId,
           identity.userName,
           identity.userPersona,
-          recentText(agent),
+          recentMsgs,
           binding?.customOpening,
           allLore,
+          seed,
         ))
       } else if (cards.length > 0) {
         const card = cards[0]!
         const allLore = svc.resolveCardAllLore(card, wsOf(binding))
-        parts.push(characterSection(card, identity.userName, identity.userPersona, recentText(agent), binding?.greetingIndex, allLore))
+        parts.push(characterSection(card, identity.userName, identity.userPersona, recentMsgs, binding?.greetingIndex, allLore, seed))
       } else {
         parts.push(unboundHint())
       }
@@ -230,8 +253,10 @@ export function apply(ctx: Context, config: Config): void {
       ? (cards.find(c => c.id === binding.activeSpeakerId) ?? cards[0]!)
       : cards[0]!
     const identity = resolveUserIdentity(svc.settings.get(), binding, activeCard)
+    const seed = String(agent?.session?.deriveMessages?.().length ?? 0)
+    const recentMsgs = recentMessagesList(agent, 30)
     const allLore = isGroup ? svc.resolveGroupAllLore(cards, wsOf(binding)) : svc.resolveCardAllLore(activeCard, wsOf(binding))
-    return { card: activeCard, groups: selectLore(allLore, recentText(agent)), userName: identity.userName }
+    return { card: activeCard, groups: selectLore(allLore, recentMsgs, seed), userName: identity.userName }
   }
   ctx.systemPrompt.context({
     name: 'roleplay:lore-depth',
@@ -368,10 +393,42 @@ export function apply(ctx: Context, config: Config): void {
       }
     }
 
+    let messages = [...decision.messages]
+    let modified = false
+
+    // ── Swipe active variant context synchronization ──
+    if (binding?.swipes && Object.keys(binding.swipes).length > 0) {
+      let turnCounter = 0
+      for (let i = 0; i < messages.length; i++) {
+        const msg = messages[i]
+        const source = msg?.source as { kind?: string } | undefined
+        const role = (msg as any)?.role ?? (source?.kind === 'user' ? 'user' : source?.kind === 'assistant' ? 'assistant' : undefined)
+        if (role === 'user') {
+          turnCounter++
+        } else if (role === 'assistant') {
+          const turnSwipe = binding.swipes[String(turnCounter)]
+          if (turnSwipe && turnSwipe.variants && turnSwipe.variants.length > 0) {
+            const activeVariant = turnSwipe.variants[turnSwipe.index] ?? turnSwipe.variants[0]
+            if (activeVariant) {
+              const cleanText = htmlToText(activeVariant)
+              if (cleanText && msg) {
+                (messages as any[])[i] = {
+                  ...msg,
+                  content: [{ type: 'text', text: cleanText }],
+                }
+                modified = true
+              }
+            }
+          }
+        }
+      }
+    }
+
     // ── One-shot Stage Direction ──
     const instruction = binding?.pendingInstruction?.trim()
     if (instruction) {
-      const content = [...original.content]
+      const targetMsg = messages[index]!
+      const content = [...targetMsg.content]
       const last = content[content.length - 1]
       const suffix = `\n\n[系统指令: ${instruction}]`
       if (last && (last as { type?: string }).type === 'text') {
@@ -379,11 +436,14 @@ export function apply(ctx: Context, config: Config): void {
       } else {
         content.push({ type: 'text', text: suffix.trimStart() } as (typeof content)[number])
       }
-      const messages = [...decision.messages]
-      messages[index] = { ...original, content } as typeof original
+      messages[index] = { ...targetMsg, content } as typeof targetMsg
       try {
         await svc.updateBinding(sessionId, { pendingInstruction: null })
       } catch {}
+      return { kind: 'enter' as const, messages }
+    }
+
+    if (modified) {
       return { kind: 'enter' as const, messages }
     }
 

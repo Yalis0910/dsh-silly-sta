@@ -4,7 +4,7 @@
  * layout: 8-byte signature, then chunks of [length u32][type 4B][data][crc u32].
  */
 
-import { deflateSync } from 'node:zlib'
+import { deflateSync, inflateSync } from 'node:zlib'
 
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
 
@@ -61,18 +61,36 @@ export function readTextChunks(bytes: Buffer): Map<string, string> {
       const sep = chunk.data.indexOf(0)
       if (sep <= 0) continue
       out.set(chunk.data.toString('latin1', 0, sep), chunk.data.toString('latin1', sep + 1))
+    } else if (chunk.type === 'zTXt') {
+      const sep = chunk.data.indexOf(0)
+      if (sep <= 0 || sep + 2 > chunk.data.length) continue
+      try {
+        const decompressed = inflateSync(chunk.data.subarray(sep + 2))
+        out.set(chunk.data.toString('latin1', 0, sep), decompressed.toString('utf8'))
+      } catch {
+        // ignore malformed
+      }
     } else if (chunk.type === 'iTXt') {
       const sep = chunk.data.indexOf(0)
       if (sep <= 0 || sep + 2 >= chunk.data.length) continue
       const compressed = chunk.data[sep + 1]
-      if (compressed !== 0) continue
+
       // keyword \0 compressionFlag compressionMethod \0 languageTag \0 translatedKeyword \0 text
       let cursor = sep + 3
       for (let fields = 0; fields < 2 && cursor < chunk.data.length; fields++) {
         cursor = chunk.data.indexOf(0, cursor) + 1
         if (cursor === 0) { cursor = chunk.data.length; break }
       }
-      out.set(chunk.data.toString('latin1', 0, sep), chunk.data.toString('utf8', cursor))
+      try {
+        if (compressed !== 0) {
+          const decompressed = inflateSync(chunk.data.subarray(cursor))
+          out.set(chunk.data.toString('latin1', 0, sep), decompressed.toString('utf8'))
+        } else {
+          out.set(chunk.data.toString('latin1', 0, sep), chunk.data.toString('utf8', cursor))
+        }
+      } catch {
+        // ignore malformed
+      }
     }
   }
   return out
@@ -98,7 +116,7 @@ export function writeTextChunks(bytes: Buffer, entries: Record<string, string>):
   const keep: Buffer[] = [PNG_SIGNATURE]
   let inserted = false
   for (const chunk of chunks(bytes)) {
-    if (chunk.type === 'tEXt' || chunk.type === 'iTXt') {
+    if (chunk.type === 'tEXt' || chunk.type === 'iTXt' || chunk.type === 'zTXt') {
       const sep = chunk.data.indexOf(0)
       const keyword = sep > 0 ? chunk.data.toString('latin1', 0, sep) : ''
       if (keyword in entries) continue

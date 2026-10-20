@@ -130,6 +130,13 @@ export type UserPersona = z.infer<typeof UserPersona>
 export const SPEAKER_MODES = ['auto', 'round_robin', 'manual'] as const
 export type SpeakerMode = (typeof SPEAKER_MODES)[number]
 
+/** One turn's swipe candidates and current selection. */
+export const SwipeTurnState = z.object({
+  index: z.number().int().min(0).default(0),
+  variants: z.array(z.string()).default([]),
+})
+export type SwipeTurnState = z.infer<typeof SwipeTurnState>
+
 /** Per-session role-play state. */
 export const SessionBinding = z.object({
   sessionId: z.string(),
@@ -153,6 +160,8 @@ export const SessionBinding = z.object({
   storyMemory: z.string().nullable().optional(),
   /** Selected opening greeting index: 0 = firstMessage, 1..N = alternateGreetings[index - 1]. */
   greetingIndex: z.number().int().min(0).default(0),
+  /** Per-turn swipe candidates and active branch index (turn -> { index, variants }). */
+  swipes: z.record(z.string(), SwipeTurnState).default({}),
   /** Filesystem path of the session's workspace (recorded by the dock; used for workspace-scoped stores). */
   workspacePath: z.string().nullable().optional(),
   /** Per-session override of the global choice-mode default. */

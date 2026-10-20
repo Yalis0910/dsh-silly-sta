@@ -11,7 +11,17 @@ import { Service, type Context } from '@deepseek-ai/cordis'
 import { defineDomain, domainTable, type Domain } from '@deepseek-ai/dsh-storage-domain'
 import { CharacterCard, GeneratedImage, SessionBinding, StandaloneLorebook, type LoreEntry } from './cards/types.ts'
 import { BlockAssembler } from '@deepseek-ai/dsh-llm'
-import { roleplayStandingRules, characterSection, groupCharacterSection, applyMacros, selectLore } from './prompts.ts'
+import {
+  roleplayStandingRules,
+  characterSection,
+  groupCharacterSection,
+  pureCharacterSection,
+  pureGroupCharacterSection,
+  applyMacros,
+  selectLore,
+  matchLoreEntry,
+  loreContext,
+} from './prompts.ts'
 import { resolveUserIdentity } from './settings.ts'
 import { cardFromInterchange, cardFromPng, cardToInterchange, cardToPng, lorebookFromInterchange, lorebookToInterchange } from './cards/codec.ts'
 import { encodeSolidPng, isPng } from './cards/png.ts'
@@ -335,13 +345,59 @@ export class RoleplayService extends Service {
     const located = this.locateCard(id, wsPath)
     if (!located) return false
     const { card, scope, root } = located
+    let deleted = false
     if (scope === 'workspace' && root) {
       if (card.avatar) await rm(join(root, 'avatars', card.avatar), { force: true })
       await rm(join(root, 'cards', `${id}.json`), { force: true })
-      return true
+      deleted = true
+    } else {
+      if (card.avatar) await rm(join(this.dataDir, 'avatars', card.avatar), { force: true })
+      deleted = await this.domain.table('cards').delete(id)
     }
-    if (card.avatar) await rm(join(this.dataDir, 'avatars', card.avatar), { force: true })
-    return this.domain.table('cards').delete(id)
+    if (deleted) {
+      await this.cleanupOrphanedCardSessions(id)
+    }
+    return deleted
+  }
+
+  private async cleanupOrphanedCardSessions(cardId: string): Promise<void> {
+    try {
+      const table = this.domain.table('sessions')
+      for (const [sessionId, binding] of table.entries()) {
+        let changed = false
+        let nextCharId = binding.characterId
+        let nextGroupIds = binding.groupCardIds
+        let nextSpeakerId = binding.activeSpeakerId
+
+        if (nextCharId === cardId) {
+          nextCharId = undefined
+          changed = true
+        }
+
+        if (nextGroupIds && nextGroupIds.includes(cardId)) {
+          nextGroupIds = nextGroupIds.filter(id => id !== cardId)
+          changed = true
+        }
+
+        if (nextSpeakerId === cardId) {
+          nextSpeakerId = nextGroupIds && nextGroupIds.length > 0 ? nextGroupIds[0] : undefined
+          changed = true
+        }
+
+        if (changed) {
+          const nextBinding: SessionBinding = {
+            ...binding,
+            characterId: nextCharId,
+            groupCardIds: nextGroupIds ?? [],
+            activeSpeakerId: nextSpeakerId,
+            updatedAt: Date.now(),
+          }
+          await table.put(sessionId, nextBinding)
+        }
+      }
+    } catch {
+      // safe fallback
+    }
   }
 
   /** Clone an existing card with a new identity, duplicating its avatar if present. */
@@ -1089,14 +1145,10 @@ ${charSnippets}
   }
 
   async inspectSessionPrompt(sessionId: string, wsPath?: string | null): Promise<PromptInspectionReport> {
-    const binding = this.getBinding(sessionId) ?? {
+    const binding: SessionBinding = this.getBinding(sessionId) ?? SessionBinding.parse({
       sessionId,
-      mode: 'roleplay' as const,
-      groupCardIds: [],
-      speakerMode: 'auto' as const,
-      greetingIndex: 0,
-      updatedAt: 0,
-    }
+      mode: 'roleplay',
+    })
     const ws = binding.workspacePath ?? wsPath
     const isGroup = (binding.groupCardIds?.length ?? 0) >= 2
     const cards = isGroup
@@ -1106,42 +1158,26 @@ ${charSnippets}
     const activeCard = binding.activeSpeakerId ? cards.find(c => c.id === binding.activeSpeakerId) : undefined
     const identity = resolveUserIdentity(this.settings.get(), binding, cards[0])
 
-    const recentMsgs = this.getSessionRecentMessages(sessionId, 6)
-    const recentText = recentMsgs.map(m => m.text).join('\n')
+    const recentMsgs = this.getSessionRecentMessages(sessionId, 30)
+    const recentTexts = recentMsgs.map(m => m.text)
+    const seed = String(binding.updatedAt || recentMsgs.length)
 
     const allLore = isGroup ? this.resolveGroupAllLore(cards, ws) : (cards[0] ? this.resolveCardAllLore(cards[0], ws) : [])
+    const loreGroups = selectLore(allLore, recentTexts, seed)
 
-    // Evaluate lore entries
+    // Evaluate lore entries using unified matchLoreEntry respecting scanDepth and seed
     const loreEntries: LoreInspectEntry[] = allLore.map(entry => {
-      let matched = false
-      let matchedKey: string | undefined
-      if (entry.constant) {
-        matched = true
-      } else if (entry.keys.length > 0 && recentText) {
-        for (const key of entry.keys) {
-          if (entry.useRegex) {
-            try {
-              if (new RegExp(key, 'iu').test(recentText)) {
-                matched = true
-                matchedKey = key
-                break
-              }
-            } catch {}
-          } else if (recentText.toLowerCase().includes(key.toLowerCase())) {
-            matched = true
-            matchedKey = key
-            break
-          }
-        }
-      }
+      const depth = (entry.scanDepth && entry.scanDepth > 0) ? entry.scanDepth : 6
+      const textToScan = recentTexts.slice(-depth).join('\n')
+      const matchRes = matchLoreEntry(entry, textToScan, seed)
       return {
         id: entry.id,
         title: entry.title || '无标题',
         source: '词条',
         keys: entry.keys,
         constant: entry.constant,
-        matched,
-        matchedKey,
+        matched: matchRes.matched,
+        matchedKey: matchRes.matchedKey,
         position: entry.position,
         contentLength: entry.content.length,
         estimatedTokens: Math.ceil(entry.content.length / 2),
@@ -1150,8 +1186,13 @@ ${charSnippets}
 
     const systemRules = roleplayStandingRules(identity.userName)
     const charSection = isGroup
-      ? groupCharacterSection(cards, binding.activeSpeakerId, identity.userName, identity.userPersona, recentText, binding.customOpening, allLore)
-      : (cards[0] ? characterSection(cards[0], identity.userName, identity.userPersona, recentText, binding.greetingIndex, allLore) : '')
+      ? groupCharacterSection(cards, binding.activeSpeakerId, identity.userName, identity.userPersona, recentTexts, binding.customOpening, allLore, seed)
+      : (cards[0] ? characterSection(cards[0], identity.userName, identity.userPersona, recentTexts, binding.greetingIndex, allLore, seed) : '')
+
+    // Pure character tokens without lore overlap to avoid double counting
+    const pureChar = isGroup
+      ? pureGroupCharacterSection(cards, binding.activeSpeakerId, identity.userName, identity.userPersona, binding.customOpening)
+      : (cards[0] ? pureCharacterSection(cards[0], identity.userName, identity.userPersona, binding.greetingIndex) : '')
 
     const memoryText = binding.storyMemory?.trim() ?? ''
     const noteText = binding.authorNote?.trim() ?? ''
@@ -1160,17 +1201,26 @@ ${charSnippets}
     const historyChars = allDerived.reduce((acc, m) => acc + m.text.length, 0)
 
     const sysTokens = Math.ceil(systemRules.length / 2)
-    const charTokens = Math.ceil(charSection.length / 2)
+    const charTokens = Math.ceil(pureChar.length / 2)
     const loreTokens = loreEntries.filter(l => l.matched).reduce((acc, l) => acc + l.estimatedTokens, 0)
     const memTokens = Math.ceil(memoryText.length / 2)
     const noteTokens = Math.ceil(noteText.length / 2)
     const histTokens = Math.ceil(historyChars / 2)
 
+    // Dynamic runtime contexts for complete preview
+    const activeName = activeCard?.name ?? (cards[0]?.name || '群聊')
+    const depthContext = loreContext(loreGroups.depth, activeName, identity.userName)
+    const userTopContext = loreContext(loreGroups.userTop, activeName, identity.userName, '[补充设定]')
+    const asstTopContext = loreContext(loreGroups.assistantTop, activeName, identity.userName, '[对下一条回复的指示]')
+
     const rawPromptPreview = [
       '=== [系统站立规则] ===\n' + systemRules,
       '=== [角色与场景设定] ===\n' + charSection,
+      depthContext ? '=== [动态深度设定 (At Depth)] ===\n' + depthContext : '',
+      userTopContext ? '=== [用户补充设定 (User Top)] ===\n' + userTopContext : '',
       memoryText ? '=== [剧情备忘录] ===\n' + memoryText : '',
       noteText ? '=== [场景设定 (Author Note)] ===\n' + noteText : '',
+      asstTopContext ? '=== [回复前置指示 (Assistant Top)] ===\n' + asstTopContext : '',
     ].filter(Boolean).join('\n\n')
 
     return {

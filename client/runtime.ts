@@ -189,9 +189,19 @@ export async function rewindAndResend(sessionId: string, prevTurnEndSeq: number,
   if (binding) {
     await api.updateSession(forkedId, {
       mode: binding.mode,
-      ...(binding.characterId !== undefined ? { characterId: binding.characterId } : {}),
-      ...(binding.choiceMode !== undefined ? { choiceMode: binding.choiceMode } : {}),
-      ...(binding.workspacePath !== undefined ? { workspacePath: binding.workspacePath } : {}),
+      characterId: binding.characterId ?? null,
+      groupCardIds: binding.groupCardIds ? [...binding.groupCardIds] : [],
+      activeSpeakerId: binding.activeSpeakerId ?? null,
+      speakerMode: binding.speakerMode ?? 'auto',
+      customOpening: binding.customOpening ?? null,
+      userPersonaId: binding.userPersonaId ?? null,
+      pendingInstruction: binding.pendingInstruction ?? null,
+      authorNote: binding.authorNote ?? null,
+      storyMemory: binding.storyMemory ?? null,
+      greetingIndex: binding.greetingIndex ?? 0,
+      workspacePath: binding.workspacePath ?? null,
+      choiceMode: binding.choiceMode ?? null,
+      swipes: binding.swipes ? JSON.parse(JSON.stringify(binding.swipes)) : {},
     }).catch(err => warn('binding copy failed', err))
   }
   // Take over the original's slot in the workspace list (fork attach prepends).

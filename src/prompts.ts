@@ -138,29 +138,59 @@ export interface LoreGroups {
   assistantTop: LoreEntry[]
 }
 
+/** Deterministic pseudo-random hit check based on entry ID and a seed (e.g. turn / session). */
+export function isProbable(entryId: string, probability: number, seed = ''): boolean {
+  if (typeof probability !== 'number' || probability >= 100) return true
+  if (probability <= 0) return false
+  let hash = 0
+  const str = `${entryId}:${seed}`
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) - hash + str.charCodeAt(i)) | 0
+  }
+  const pct = Math.abs(hash) % 100
+  return pct < probability
+}
+
+/** Check whether one lore entry matches against a text snippet. */
+export function matchLoreEntry(entry: LoreEntry, text: string, seed = ''): { matched: boolean; matchedKey?: string } {
+  if (!entry.enabled) return { matched: false }
+  if (entry.constant) return { matched: true }
+  if (!isProbable(entry.id, entry.probability, seed)) return { matched: false }
+  if (entry.keys.length === 0) return { matched: false }
+  for (const key of entry.keys) {
+    if (entry.useRegex) {
+      try {
+        if (new RegExp(key, 'iu').test(text)) return { matched: true, matchedKey: key }
+      } catch {
+        // ignore invalid regex
+      }
+    } else if (text.toLowerCase().includes(key.toLowerCase())) {
+      return { matched: true, matchedKey: key }
+    }
+  }
+  return { matched: false }
+}
+
+function getTextForEntry(entry: LoreEntry, recentMessages: string[] | string, defaultDepth: number): string {
+  if (typeof recentMessages === 'string') return recentMessages
+  const depth = (entry.scanDepth && entry.scanDepth > 0) ? entry.scanDepth : defaultDepth
+  return recentMessages.slice(-depth).join('\n')
+}
+
 /**
  * Split the card's enabled lore entries by injection position, keeping only
  * constant entries and those whose keywords fire against the recent text.
- * @param recentText - concatenated recent conversation text used for keyword scans.
+ * @param recentMessages - recent conversation text (or list of recent message texts).
  */
-export function selectLore(book: LoreEntry[], recentText: string): LoreGroups {
+export function selectLore(
+  book: LoreEntry[],
+  recentMessages: string[] | string,
+  seed = '',
+  defaultDepth = 6,
+): LoreGroups {
   const fired = book.filter(entry => {
-    if (!entry.enabled) return false
-    if (entry.constant) return true
-    if (typeof entry.probability === 'number' && entry.probability < 100) {
-      if (Math.random() * 100 > entry.probability) return false
-    }
-    if (entry.keys.length === 0) return false
-    return entry.keys.some(key => {
-      if (entry.useRegex) {
-        try {
-          return new RegExp(key, 'iu').test(recentText)
-        } catch {
-          return false
-        }
-      }
-      return recentText.toLowerCase().includes(key.toLowerCase())
-    })
+    const text = getTextForEntry(entry, recentMessages, defaultDepth)
+    return matchLoreEntry(entry, text, seed).matched
   })
   const byOrder = (a: LoreEntry, b: LoreEntry) => a.order - b.order
   return {
@@ -182,24 +212,16 @@ export function loreContext(entries: LoreEntry[], charName: string, userName: st
   return escapeBraces(header ? `${header}\n${body}` : body)
 }
 
-/** The character block injected for a bound role-play session. */
-export function characterSection(
+/** The character block (excluding lore injection) for a single character card. */
+export function pureCharacterSection(
   card: CharacterCard,
   userName: string,
   userPersona: string,
-  recentText: string,
   greetingIndex?: number,
-  allLore?: LoreEntry[],
 ): string {
   const macros = (text: string) => applyMacros(text, card.name, userName)
-  const lore = selectLore(allLore ?? card.book, recentText)
   const parts: string[] = []
-  if (lore.top.length > 0) parts.push(loreSection(lore.top, card.name, userName))
-  if (lore.before.length > 0) parts.push(loreSection(lore.before, card.name, userName))
   const definition: string[] = [`[你扮演的角色]`, `名字：${card.name}`]
-  // Both fields read as persona: cards written here use `description` as a
-  // short intro ahead of `personality`, interchange cards put the whole persona
-  // in `description` and often leave `personality` empty. One heading, that order.
   const persona = [card.description, card.personality].filter(text => text.trim()).map(macros)
   if (persona.length > 0) definition.push(`设定：\n${persona.join('\n\n')}`)
   if (card.scenario.trim()) definition.push(`当前场景：\n${macros(card.scenario)}`)
@@ -207,7 +229,6 @@ export function characterSection(
   parts.push(definition.join('\n\n'))
   if (card.systemPrompt.trim()) parts.push(cardRulesSection(card.systemPrompt, card.name, userName))
   if (userPersona.trim()) parts.push(`[用户设定]\n${userName}：${userPersona}`)
-  if (lore.after.length > 0) parts.push(loreSection(lore.after, card.name, userName))
   const allGreetings = [card.firstMessage, ...(card.alternateGreetings ?? [])].filter(Boolean)
   const activeGreeting = (greetingIndex !== undefined && greetingIndex >= 0 && allGreetings[greetingIndex])
     ? allGreetings[greetingIndex]
@@ -218,23 +239,36 @@ export function characterSection(
   return parts.join('\n\n')
 }
 
-/** The multi-character group stage block injected for a group chat session. */
-export function groupCharacterSection(
+/** The character block injected for a bound role-play session. */
+export function characterSection(
+  card: CharacterCard,
+  userName: string,
+  userPersona: string,
+  recentMessages: string[] | string,
+  greetingIndex?: number,
+  allLore?: LoreEntry[],
+  seed = '',
+): string {
+  const lore = selectLore(allLore ?? card.book, recentMessages, seed)
+  const parts: string[] = []
+  if (lore.top.length > 0) parts.push(loreSection(lore.top, card.name, userName))
+  if (lore.before.length > 0) parts.push(loreSection(lore.before, card.name, userName))
+  parts.push(pureCharacterSection(card, userName, userPersona, greetingIndex))
+  if (lore.after.length > 0) parts.push(loreSection(lore.after, card.name, userName))
+  return parts.join('\n\n')
+}
+
+/** Pure character stage definition for group chat (excluding lore injection). */
+export function pureGroupCharacterSection(
   cards: CharacterCard[],
   activeSpeakerId: string | null | undefined,
   userName: string,
   userPersona: string,
-  recentText: string,
   fusedOpening?: string | null,
-  allLore?: LoreEntry[],
 ): string {
   if (cards.length === 0) return ''
   const activeCard = activeSpeakerId ? cards.find(c => c.id === activeSpeakerId) : undefined
-  const lore = selectLore(allLore ?? cards.flatMap(c => c.book), recentText)
   const parts: string[] = []
-
-  if (lore.top.length > 0) parts.push(loreSection(lore.top, activeCard?.name ?? '群聊', userName))
-  if (lore.before.length > 0) parts.push(loreSection(lore.before, activeCard?.name ?? '群聊', userName))
 
   if (activeCard) {
     // ── Targeted Turn: Single speaker focused, companions in scene ──
@@ -275,12 +309,37 @@ export function groupCharacterSection(
   }
 
   if (userPersona.trim()) parts.push(`[用户设定]\n${userName}：${userPersona}`)
-  if (lore.after.length > 0) parts.push(loreSection(lore.after, activeCard?.name ?? '群聊', userName))
 
   const opening = fusedOpening?.trim() || cards[0]?.firstMessage?.trim()
   if (opening) {
     parts.push(`[开场场景]\n对话由这段开场白/初始场景开始（用户已读过，不要重复它，衔接其后的剧情推进即可）：\n${applyMacros(opening, activeCard?.name ?? cards[0]?.name ?? '', userName)}`)
   }
+
+  return parts.join('\n\n')
+}
+
+/** The multi-character group stage block injected for a group chat session. */
+export function groupCharacterSection(
+  cards: CharacterCard[],
+  activeSpeakerId: string | null | undefined,
+  userName: string,
+  userPersona: string,
+  recentMessages: string[] | string,
+  fusedOpening?: string | null,
+  allLore?: LoreEntry[],
+  seed = '',
+): string {
+  if (cards.length === 0) return ''
+  const activeCard = activeSpeakerId ? cards.find(c => c.id === activeSpeakerId) : undefined
+  const lore = selectLore(allLore ?? cards.flatMap(c => c.book), recentMessages, seed)
+  const parts: string[] = []
+
+  if (lore.top.length > 0) parts.push(loreSection(lore.top, activeCard?.name ?? '群聊', userName))
+  if (lore.before.length > 0) parts.push(loreSection(lore.before, activeCard?.name ?? '群聊', userName))
+
+  parts.push(pureGroupCharacterSection(cards, activeSpeakerId, userName, userPersona, fusedOpening))
+
+  if (lore.after.length > 0) parts.push(loreSection(lore.after, activeCard?.name ?? '群聊', userName))
 
   return parts.join('\n\n')
 }

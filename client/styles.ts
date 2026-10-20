@@ -1642,6 +1642,17 @@ body:not([data-rp-active="1"]) [data-chat-flow-kind="tool-call"][data-turn-proce
   color: var(--yh-neutral-6);
   font-style: italic;
 }
+.rp-speaker {
+  display: inline-block;
+  font-size: 0.88em;
+  font-weight: 600;
+  color: var(--yh-accent);
+  background: var(--yh-accent-soft);
+  border: 1px solid var(--yh-accent-line);
+  border-radius: 999px;
+  padding: 0 6px;
+  margin-right: 4px;
+}
 ::highlight(rp-say) {
   color: var(--yh-accent);
   font-weight: 500;
@@ -1649,6 +1660,10 @@ body:not([data-rp-active="1"]) [data-chat-flow-kind="tool-call"][data-turn-proce
 ::highlight(rp-think) {
   color: var(--yh-neutral-6);
   font-style: italic;
+}
+::highlight(rp-speaker) {
+  color: var(--yh-accent);
+  font-weight: 600;
 }
 
 /* ── Message Action Row ─────────────────────────────────────────────── */
