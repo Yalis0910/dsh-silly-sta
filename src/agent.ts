@@ -17,6 +17,7 @@ import {
   applyMacros,
   cardPostHistoryContext,
   characterSection,
+  groupCharacterSection,
   choiceModeSection,
   escapeBraces,
   forgeBoundCardSection,
@@ -173,10 +174,27 @@ export function apply(ctx: Context, config: Config): void {
       const settings = svc.settings.get()
       const agent = agentOf(context)
       const binding = agent ? svc.getBinding(String(agent.id)) : undefined
-      const card = binding?.characterId ? svc.getCard(binding.characterId, binding.workspacePath) : undefined
-      const identity = resolveUserIdentity(settings, binding, card)
+      const isGroup = (binding?.groupCardIds?.length ?? 0) >= 2
+      const cards = binding ? svc.resolveGroupCards(binding, binding.workspacePath) : []
+      const activeCard = binding?.activeSpeakerId
+        ? (cards.find(c => c.id === binding.activeSpeakerId) ?? cards[0])
+        : cards[0]
+      const identity = resolveUserIdentity(settings, binding, activeCard)
       const parts = [roleplayStandingRules(identity.userName)]
-      if (card) {
+
+      if (isGroup && cards.length >= 2) {
+        const allLore = svc.resolveGroupAllLore(cards, binding?.workspacePath)
+        parts.push(groupCharacterSection(
+          cards,
+          binding?.activeSpeakerId,
+          identity.userName,
+          identity.userPersona,
+          recentText(agent),
+          binding?.customOpening,
+          allLore,
+        ))
+      } else if (cards.length > 0) {
+        const card = cards[0]!
         const allLore = svc.resolveCardAllLore(card, binding?.workspacePath)
         parts.push(characterSection(card, identity.userName, identity.userPersona, recentText(agent), binding?.greetingIndex, allLore))
       } else {
@@ -196,11 +214,16 @@ export function apply(ctx: Context, config: Config): void {
     const svc = service()
     const agent = agentOf(context)
     const binding = agent ? svc.getBinding(String(agent.id)) : undefined
-    const card = binding?.characterId ? svc.getCard(binding.characterId, binding.workspacePath) : undefined
-    if (!card) return undefined
-    const identity = resolveUserIdentity(svc.settings.get(), binding, card)
-    const allLore = svc.resolveCardAllLore(card, binding?.workspacePath)
-    return { card, groups: selectLore(allLore, recentText(agent)), userName: identity.userName }
+    if (!binding) return undefined
+    const isGroup = (binding.groupCardIds?.length ?? 0) >= 2
+    const cards = svc.resolveGroupCards(binding, binding.workspacePath)
+    if (cards.length === 0) return undefined
+    const activeCard = binding.activeSpeakerId
+      ? (cards.find(c => c.id === binding.activeSpeakerId) ?? cards[0]!)
+      : cards[0]!
+    const identity = resolveUserIdentity(svc.settings.get(), binding, activeCard)
+    const allLore = isGroup ? svc.resolveGroupAllLore(cards, binding.workspacePath) : svc.resolveCardAllLore(activeCard, binding.workspacePath)
+    return { card: activeCard, groups: selectLore(allLore, recentText(agent)), userName: identity.userName }
   }
   ctx.systemPrompt.context({
     name: 'roleplay:lore-depth',
@@ -274,10 +297,14 @@ export function apply(ctx: Context, config: Config): void {
       const svc = service()
       const agent = agentOf(context)
       const binding = agent ? svc.getBinding(String(agent.id)) : undefined
-      const card = binding?.characterId ? svc.getCard(binding.characterId, binding.workspacePath) : undefined
-      if (!card) return ''
-      const identity = resolveUserIdentity(svc.settings.get(), binding, card)
-      return cardPostHistoryContext(card, identity.userName)
+      if (!binding) return ''
+      const cards = svc.resolveGroupCards(binding, binding.workspacePath)
+      const activeCard = binding.activeSpeakerId
+        ? (cards.find(c => c.id === binding.activeSpeakerId) ?? cards[0])
+        : cards[0]
+      if (!activeCard) return ''
+      const identity = resolveUserIdentity(svc.settings.get(), binding, activeCard)
+      return cardPostHistoryContext(activeCard, identity.userName)
     },
   })
 
@@ -307,6 +334,32 @@ export function apply(ctx: Context, config: Config): void {
     } else {
       content.push({ type: 'text', text: suffix.trimStart() } as (typeof content)[number])
     }
+    const binding = svc.getBinding(sessionId)
+    if (binding && binding.groupCardIds && binding.groupCardIds.length >= 2) {
+      let userText = ''
+      for (const block of content) {
+        if (block && typeof block === 'object' && (block as any).type === 'text') {
+          userText += (block as any).text ?? ''
+        }
+      }
+      const match = userText.match(/【对\s*([^】]+?)\s*(?:说|讲|问)?】/)
+      if (match) {
+        const targetName = match[1]!.trim().toLowerCase()
+        const cards = svc.resolveGroupCards(binding, binding.workspacePath)
+        const found = cards.find(c => c.name.toLowerCase() === targetName || c.name.toLowerCase().includes(targetName))
+        if (found && found.id !== binding.activeSpeakerId) {
+          void svc.updateBinding(sessionId, { activeSpeakerId: found.id }).catch(() => {})
+        }
+      } else if (binding.speakerMode === 'round_robin') {
+        const ids = binding.groupCardIds
+        const currentIdx = ids.indexOf(binding.activeSpeakerId ?? '')
+        const nextId = ids[(currentIdx + 1) % ids.length]
+        if (nextId) {
+          void svc.updateBinding(sessionId, { activeSpeakerId: nextId }).catch(() => {})
+        }
+      }
+    }
+
     const messages = [...decision.messages]
     messages[index] = { ...original, content } as typeof original
     void svc.updateBinding(sessionId, { pendingInstruction: null }).catch(() => {})
