@@ -10,6 +10,9 @@ import { isAbsolute, join, parse, resolve } from 'node:path'
 import { Service, type Context } from '@deepseek-ai/cordis'
 import { defineDomain, domainTable, type Domain } from '@deepseek-ai/dsh-storage-domain'
 import { CharacterCard, GeneratedImage, SessionBinding, StandaloneLorebook, type LoreEntry } from './cards/types.ts'
+import { BlockAssembler } from '@deepseek-ai/dsh-llm'
+import { roleplayStandingRules, characterSection, groupCharacterSection, applyMacros, selectLore } from './prompts.ts'
+import { resolveUserIdentity } from './settings.ts'
 import { cardFromInterchange, cardFromPng, cardToInterchange, cardToPng, lorebookFromInterchange, lorebookToInterchange } from './cards/codec.ts'
 import { encodeSolidPng, isPng } from './cards/png.ts'
 import type { SettingsStore } from './settings.ts'
@@ -33,6 +36,39 @@ const domainSpec = defineDomain({
 
 /** Which store a card/image lives in: the global data dir, or the current workspace's subfolder. */
 export type StoreScope = 'global' | 'workspace'
+
+
+export interface LoreInspectEntry {
+  id: string
+  title: string
+  source: string
+  keys: string[]
+  constant: boolean
+  matched: boolean
+  matchedKey?: string | undefined
+  position: string
+  contentLength: number
+  estimatedTokens: number
+}
+
+export interface PromptInspectionReport {
+  sessionId: string
+  mode: 'single' | 'group'
+  characters: { id: string; name: string }[]
+  activeSpeaker?: { id: string; name: string } | undefined
+  totalEstimatedTokens: number
+  breakdown: {
+    systemRulesTokens: number
+    characterTokens: number
+    lorebookTokens: number
+    storyMemoryTokens: number
+    authorNoteTokens: number
+    historyTokens: number
+  }
+  loreEntries: LoreInspectEntry[]
+  rawPromptPreview: string
+  recentMessagesCount: number
+}
 
 export class RoleplayService extends Service {
   readonly settings: SettingsStore
@@ -870,4 +906,271 @@ export class RoleplayService extends Service {
     }
     return moved
   }
+
+  resolveGroupCards(binding: SessionBinding, wsPath?: string): CharacterCard[] {
+    const cardIds = binding.groupCardIds && binding.groupCardIds.length > 0
+      ? binding.groupCardIds
+      : (binding.characterId ? [binding.characterId] : [])
+    const cards: CharacterCard[] = []
+    const ws = binding.workspacePath ?? wsPath
+    for (const id of cardIds) {
+      const card = this.getCard(id, ws)
+      if (card) cards.push(card)
+    }
+    return cards
+  }
+
+  resolveGroupAllLore(cards: CharacterCard[], wsPath?: string): LoreEntry[] {
+    const seen = new Set<string>()
+    const entries: LoreEntry[] = []
+    for (const card of cards) {
+      const cardLore = this.resolveCardAllLore(card, wsPath)
+      for (const entry of cardLore) {
+        if (!seen.has(entry.id)) {
+          seen.add(entry.id)
+          entries.push(entry)
+        }
+      }
+    }
+    return entries
+  }
+
+  private resolveModelTarget(sessionId: string): { provider: string; model: string } | undefined {
+    const agent = (this.ctx as any).agents?.get(sessionId)
+    const latest = agent?.session?.requestHeader?.()?.config
+    if (latest?.provider && latest?.model) return { provider: latest.provider, model: latest.model }
+    const options = agent?.options
+    if (options?.provider && options?.model) return { provider: options.provider, model: options.model }
+    const providers = (this.ctx as any).llm?.listProviders() ?? []
+    for (const p of providers) {
+      if (p.models && p.models.length > 0) {
+        return { provider: p.id, model: p.models[0].id }
+      }
+    }
+    return undefined
+  }
+
+  private getSessionRecentMessages(sessionId: string, count = 20): { role: string; text: string }[] {
+    const agent = (this.ctx as any).agents?.get(sessionId)
+    if (!agent?.session?.deriveMessages) return []
+    const derived = agent.session.deriveMessages()
+    const result: { role: string; text: string }[] = []
+    for (const m of derived) {
+      const role = m.role ?? (m.source?.kind === 'user' ? 'user' : 'assistant')
+      if (role !== 'user' && role !== 'assistant') continue
+      let text = ''
+      if (typeof m.content === 'string') {
+        text = m.content
+      } else if (Array.isArray(m.content)) {
+        for (const part of m.content) {
+          if (part && typeof part === 'object' && part.type === 'text') {
+            text += part.text ?? ''
+          }
+        }
+      }
+      if (text.trim()) {
+        result.push({ role, text: text.trim() })
+      }
+    }
+    return result.slice(-count)
+  }
+
+  async generateRecap(sessionId: string, wsPath?: string): Promise<{ recap: string }> {
+    const target = this.resolveModelTarget(sessionId)
+    if (!target) throw new Error('未找到可用的模型配置进行总结')
+    const recent = this.getSessionRecentMessages(sessionId, 25)
+    if (recent.length < 2) {
+      throw new Error('当前会话暂无足够的剧情对话进行提炼，请先进行几轮对话')
+    }
+    const binding = this.getBinding(sessionId)
+    const cards = binding ? this.resolveGroupCards(binding, wsPath) : []
+    const charNames = cards.map(c => c.name).join('、') || '角色'
+    const identity = resolveUserIdentity(this.settings.get(), binding, cards[0])
+
+    const dialogueText = recent.map(m => `${m.role === 'user' ? identity.userName : charNames}: ${m.text}`).join('\n')
+
+    const promptText = `你是一个角色扮演剧情分析提炼助手。
+请根据以下最近的剧情对话，总结提炼出必须长期铭记的核心事实、约定与现状。
+请严格输出为 Markdown 列表，包含以下 4 类标签（若无对应内容可省略对应标签）：
+- [约定] 双方或各角色之间达成的明确承诺、契约或约定
+- [秘密] 尚未公开、隐瞒的真相或潜藏线索
+- [信物] 交换、携带或获得的重要道具与关键物品
+- [状态] 当前两人/团队之间的关系阶段、好感度进展与核心心理现状
+
+格式要求：每条一句话，简明扼要，直奔主题，不要任何客套前言、寒暄或多余解释。直接输出列表内容。
+
+近期剧情对话片段：
+${dialogueText}`
+
+    const assembler = new BlockAssembler()
+    const stream = (this.ctx as any).llm.stream({
+      provider: target.provider,
+      model: target.model,
+      messages: [{ role: 'user', content: [{ type: 'text', text: promptText }] }],
+      maxTokens: 1024,
+      sessionId,
+    })
+
+    for await (const chunk of stream) {
+      assembler.push(chunk)
+    }
+
+    const text = assembler.blocks().filter(b => b.type === 'text').map(b => (b as any).text).join('').trim()
+    if (!text) throw new Error('模型未返回有效总结内容')
+    return { recap: text }
+  }
+
+  async fuseGroupGreetings(sessionId: string, wsPath?: string): Promise<{ opening: string }> {
+    const binding = this.getBinding(sessionId)
+    if (!binding) throw new Error('会话不存在')
+    const cards = this.resolveGroupCards(binding, wsPath)
+    if (cards.length < 2) {
+      throw new Error('群聊至少需要 2 名角色才能进行开场融合')
+    }
+    const target = this.resolveModelTarget(sessionId)
+    if (!target) throw new Error('未找到可用的模型配置进行融合')
+    const identity = resolveUserIdentity(this.settings.get(), binding, cards[0])
+
+    const charSnippets = cards.map(c => {
+      const greeting = c.firstMessage || c.alternateGreetings?.[0] || '（无单独开场）'
+      return `角色【${c.name}】：\n性格设定：${c.description || c.personality}\n原单人开场白：${greeting}`
+    }).join('\n\n')
+
+    const promptText = `你是一位高水平小说家与跑团主持人。
+现在有多位角色即将与玩家【${identity.userName}】共同处于同一个群聊/冒险场景中。
+以下是各个角色的基本设定与他们各自原有的单人开场白：
+
+${charSnippets}
+
+【任务要求】：
+请将以上各位角色的单人开场情境无缝融合，编写一段生动、自然的「多人同场第一幕」开场白。
+1. 让所有在场角色自然地出现在同一时间和空间内（例如共同在一间酒馆、冒险小队营地、书房或街道上）。
+2. 展示他们各自鲜明的性格、动作互动或台词，并给玩家【${identity.userName}】留出自然接话回应的切入点。
+3. 对白使用『』包裹，心理使用（）包裹。
+4. 篇幅 300~600 字，直接输出融合后的开场白正文，不要任何前言、总结或解释。`
+
+    const assembler = new BlockAssembler()
+    const stream = (this.ctx as any).llm.stream({
+      provider: target.provider,
+      model: target.model,
+      messages: [{ role: 'user', content: [{ type: 'text', text: promptText }] }],
+      maxTokens: 1024,
+      sessionId,
+    })
+
+    for await (const chunk of stream) {
+      assembler.push(chunk)
+    }
+
+    const text = assembler.blocks().filter(b => b.type === 'text').map(b => (b as any).text).join('').trim()
+    if (!text) throw new Error('模型未返回有效开场白内容')
+    await this.updateBinding(sessionId, { customOpening: text })
+    return { opening: text }
+  }
+
+  async inspectSessionPrompt(sessionId: string, wsPath?: string): Promise<PromptInspectionReport> {
+    const binding = this.getBinding(sessionId) ?? {
+      sessionId,
+      mode: 'roleplay' as const,
+      groupCardIds: [],
+      speakerMode: 'auto' as const,
+      greetingIndex: 0,
+      updatedAt: 0,
+    }
+    const ws = binding.workspacePath ?? wsPath
+    const isGroup = (binding.groupCardIds?.length ?? 0) >= 2
+    const cards = isGroup
+      ? this.resolveGroupCards(binding, ws)
+      : (binding.characterId ? [this.getCard(binding.characterId, ws)].filter(Boolean) as CharacterCard[] : [])
+
+    const activeCard = binding.activeSpeakerId ? cards.find(c => c.id === binding.activeSpeakerId) : undefined
+    const identity = resolveUserIdentity(this.settings.get(), binding, cards[0])
+
+    const recentMsgs = this.getSessionRecentMessages(sessionId, 6)
+    const recentText = recentMsgs.map(m => m.text).join('\n')
+
+    const allLore = isGroup ? this.resolveGroupAllLore(cards, ws) : (cards[0] ? this.resolveCardAllLore(cards[0], ws) : [])
+
+    // Evaluate lore entries
+    const loreEntries: LoreInspectEntry[] = allLore.map(entry => {
+      let matched = false
+      let matchedKey: string | undefined
+      if (entry.constant) {
+        matched = true
+      } else if (entry.keys.length > 0 && recentText) {
+        for (const key of entry.keys) {
+          if (entry.useRegex) {
+            try {
+              if (new RegExp(key, 'iu').test(recentText)) {
+                matched = true
+                matchedKey = key
+                break
+              }
+            } catch {}
+          } else if (recentText.toLowerCase().includes(key.toLowerCase())) {
+            matched = true
+            matchedKey = key
+            break
+          }
+        }
+      }
+      return {
+        id: entry.id,
+        title: entry.title || '无标题',
+        source: '词条',
+        keys: entry.keys,
+        constant: entry.constant,
+        matched,
+        matchedKey,
+        position: entry.position,
+        contentLength: entry.content.length,
+        estimatedTokens: Math.ceil(entry.content.length / 2),
+      }
+    })
+
+    const systemRules = roleplayStandingRules(identity.userName)
+    const charSection = isGroup
+      ? groupCharacterSection(cards, binding.activeSpeakerId, identity.userName, identity.userPersona, recentText, binding.customOpening, allLore)
+      : (cards[0] ? characterSection(cards[0], identity.userName, identity.userPersona, recentText, binding.greetingIndex, allLore) : '')
+
+    const memoryText = binding.storyMemory?.trim() ?? ''
+    const noteText = binding.authorNote?.trim() ?? ''
+
+    const allDerived = this.getSessionRecentMessages(sessionId, 100)
+    const historyChars = allDerived.reduce((acc, m) => acc + m.text.length, 0)
+
+    const sysTokens = Math.ceil(systemRules.length / 2)
+    const charTokens = Math.ceil(charSection.length / 2)
+    const loreTokens = loreEntries.filter(l => l.matched).reduce((acc, l) => acc + l.estimatedTokens, 0)
+    const memTokens = Math.ceil(memoryText.length / 2)
+    const noteTokens = Math.ceil(noteText.length / 2)
+    const histTokens = Math.ceil(historyChars / 2)
+
+    const rawPromptPreview = [
+      '=== [系统站立规则] ===\n' + systemRules,
+      '=== [角色与场景设定] ===\n' + charSection,
+      memoryText ? '=== [剧情备忘录] ===\n' + memoryText : '',
+      noteText ? '=== [场景设定 (Author Note)] ===\n' + noteText : '',
+    ].filter(Boolean).join('\n\n')
+
+    return {
+      sessionId,
+      mode: isGroup ? 'group' : 'single',
+      characters: cards.map(c => ({ id: c.id, name: c.name })),
+      ...(activeCard ? { activeSpeaker: { id: activeCard.id, name: activeCard.name } } : {}),
+      totalEstimatedTokens: sysTokens + charTokens + loreTokens + memTokens + noteTokens + histTokens,
+      breakdown: {
+        systemRulesTokens: sysTokens,
+        characterTokens: charTokens,
+        lorebookTokens: loreTokens,
+        storyMemoryTokens: memTokens,
+        authorNoteTokens: noteTokens,
+        historyTokens: histTokens,
+      },
+      loreEntries,
+      rawPromptPreview,
+      recentMessagesCount: allDerived.length,
+    }
+  }
+
 }

@@ -16,6 +16,7 @@ import { currentWorkspace, openSessionId, subscribeWorkspaces, takeResend, works
 import { useAgentPreset, useComposerTakenOver, useSessionBlank, useSessionRunning, type SessionSlotProps } from './compat.ts'
 import { colorizeProse, compileCardRules, replaceMacros, startProseHighlighter, type CardColorRule } from './colorize.tsx'
 import { Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
+import { InspectorTray } from './inspector.tsx'
 import { useT, tf } from './i18n.ts'
 
 interface DockProps extends SessionSlotProps {
@@ -123,13 +124,15 @@ function useOpeningHolder(active: boolean): HTMLElement | null {
 type BoundCard = NonNullable<SessionState['card']>
 
 /** The bound card's opening message as a character bubble (macros resolved, prose colored). */
-function OpeningBubble({ card, rules, greetingIndex = 0, onSwitchGreeting, canSwitch = true, userName: propUserName }: {
+function OpeningBubble({ card, rules, greetingIndex = 0, onSwitchGreeting, canSwitch = true, userName: propUserName, onFuseOpening, fusing }: {
   card: BoundCard
   rules: readonly CardColorRule[]
   greetingIndex?: number
   onSwitchGreeting?: (index: number) => void
   canSwitch?: boolean
   userName?: string
+  onFuseOpening?: () => void
+  fusing?: boolean
 }): React.ReactNode {
   const t = useT()
   const fallbackUserName = useUserName()
@@ -156,6 +159,18 @@ function OpeningBubble({ card, rules, greetingIndex = 0, onSwitchGreeting, canSw
               ‹
             </button>
             <span className="rp-greeting-count">{activeIndex + 1} / {allGreetings.length}</span>
+            {onFuseOpening ? (
+              <button
+                type="button"
+                className="rp-btn-subtle"
+                style={{ fontSize: 11, marginLeft: 6 }}
+                disabled={fusing}
+                onClick={onFuseOpening}
+                title="让 AI 将全员的开场情境无缝融合为同一时空的群戏开局"
+              >
+                {fusing ? '融合中…' : '🪄 融合多人开场'}
+              </button>
+            ) : null}
             <button
               type="button"
               className="rp-greeting-btn"
@@ -174,12 +189,14 @@ function OpeningBubble({ card, rules, greetingIndex = 0, onSwitchGreeting, canSw
 }
 
 /** Compact opening preview inside the dock (blank sessions, before the first send). */
-function OpeningInline({ card, rules, greetingIndex = 0, onSwitchGreeting, userName: propUserName }: {
+function OpeningInline({ card, rules, greetingIndex = 0, onSwitchGreeting, userName: propUserName, onFuseOpening, fusing }: {
   card: BoundCard
   rules: readonly CardColorRule[]
   greetingIndex?: number
   onSwitchGreeting?: (index: number) => void
   userName?: string
+  onFuseOpening?: () => void
+  fusing?: boolean
 }): React.ReactNode {
   const fallbackUserName = useUserName()
   const userName = propUserName || fallbackUserName
@@ -202,6 +219,18 @@ function OpeningInline({ card, rules, greetingIndex = 0, onSwitchGreeting, userN
               ‹
             </button>
             <span className="rp-greeting-count">{activeIndex + 1} / {allGreetings.length}</span>
+            {onFuseOpening ? (
+              <button
+                type="button"
+                className="rp-btn-subtle"
+                style={{ fontSize: 11, marginLeft: 6 }}
+                disabled={fusing}
+                onClick={onFuseOpening}
+                title="让 AI 将全员的开场情境无缝融合为同一时空的群戏开局"
+              >
+                {fusing ? '融合中…' : '🪄 融合多人开场'}
+              </button>
+            ) : null}
             <button
               type="button"
               className="rp-greeting-btn"
@@ -251,7 +280,9 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
   const [cards, setCards] = useState<CardSummary[] | null>(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
-  const [activeTray, setActiveTray] = useState<'none' | 'instruction' | 'note' | 'memory'>('none')
+  const [activeTray, setActiveTray] = useState<'none' | 'instruction' | 'note' | 'memory' | 'inspector'>('none')
+  const [inviteOpen, setInviteOpen] = useState(false)
+  const [fusingOpening, setFusingOpening] = useState(false)
 
   /** This session's workspace path — recorded on the binding for host-side stores.
       Subscribed: the workspaces feed loads async and this must follow it in. */
@@ -297,7 +328,7 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
   }, [wsPath])
 
   useEffect(() => {
-    if (state && !bound && cards === null) {
+    if (state && cards === null) {
       api.cards(wsPath)
         .then(result => setCards(result.cards))
         .catch(err => setError(String(err instanceof Error ? err.message : err)))
@@ -336,6 +367,60 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
     inputActions.setDraft(`[系统指令: ${instruction}]`)
     inputActions.submit()
   }, [inputActions])
+
+
+  const isGroup = (state?.binding?.groupCardIds?.length ?? 0) >= 2
+  const groupCards = state?.groupCards ?? []
+
+  const activeSpeakerId = state?.binding?.activeSpeakerId ?? state?.binding?.characterId
+  const activeSpeaker = isGroup ? groupCards.find(c => c.id === activeSpeakerId) ?? groupCards[0] : null
+
+  const addMember = useCallback(async (cardId: string) => {
+    if (!state?.binding) return
+    const current = state.binding.groupCardIds && state.binding.groupCardIds.length > 0
+      ? [...state.binding.groupCardIds]
+      : (state.binding.characterId ? [state.binding.characterId] : [])
+    if (current.includes(cardId)) return
+    current.push(cardId)
+    await api.updateSession(sessionId, {
+      groupCardIds: current,
+      characterId: current[0] ?? null,
+    })
+    reload()
+  }, [sessionId, state, reload])
+
+  const removeMember = useCallback(async (cardId: string) => {
+    if (!state?.binding) return
+    const current = (state.binding.groupCardIds ?? []).filter(id => id !== cardId)
+    await api.updateSession(sessionId, {
+      groupCardIds: current,
+      characterId: current[0] ?? null,
+      activeSpeakerId: state.binding.activeSpeakerId === cardId ? null : undefined,
+    })
+    reload()
+  }, [sessionId, state, reload])
+
+  const setSpeaker = useCallback(async (cardId: string | null) => {
+    await api.updateSession(sessionId, { activeSpeakerId: cardId })
+    reload()
+  }, [sessionId, reload])
+
+  const setSpeakerMode = useCallback(async (speakerMode: 'auto' | 'round_robin' | 'manual') => {
+    await api.updateSession(sessionId, { speakerMode })
+    reload()
+  }, [sessionId, reload])
+
+  const fuseOpening = useCallback(async () => {
+    setFusingOpening(true)
+    try {
+      await api.fuseGreetings(sessionId, wsPath)
+      reload()
+    } catch (err) {
+      setError(String(err instanceof Error ? err.message : err))
+    } finally {
+      setFusingOpening(false)
+    }
+  }, [sessionId, wsPath, reload])
 
   const choiceMode = state ? (state.binding?.choiceMode ?? state.choiceModeDefault) : false
   const holder = usePendingHolder(pending && mode === 'roleplay' && bound !== null)
@@ -475,6 +560,17 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
       onClick={() => setActiveTray(prev => (prev === 'instruction' ? 'none' : 'instruction'))}
     >
       {t('rp.dock.instruction')}{hasInstruction ? ' ●' : ''}
+    </button>
+  ) : null
+
+  const inspectorButton = !isForge ? (
+    <button
+      type="button"
+      className={`rp-btn${activeTray === 'inspector' ? ' rp-active' : ''}`}
+      title={t('rp.dock.inspector.title')}
+      onClick={() => setActiveTray(prev => (prev === 'inspector' ? 'none' : 'inspector'))}
+    >
+      🔍 {t('rp.dock.inspector')}
     </button>
   ) : null
 
@@ -765,16 +861,48 @@ const MEMORY_CHIPS = [
   { labelKey: 'rp.dock.memory.chip.status', prefix: '[状态] ' },
 ] as const
 
-function MemoryTray({ sessionId, memory, reload, onClose }: {
+function MemoryTray({ sessionId, memory, wsPath, reload, onClose }: {
   sessionId: string
   memory: string
+  wsPath?: string
   reload: () => void
   onClose: () => void
 }): React.ReactNode {
   const t = useT()
   const [text, setText] = useState(memory)
+  const [recapLoading, setRecapLoading] = useState(false)
+  const [recapError, setRecapError] = useState('')
+  const [recapResult, setRecapResult] = useState<string | null>(null)
   const ref = useRef<HTMLTextAreaElement | null>(null)
   const saveTimer = useRef<number | undefined>(undefined)
+
+  const triggerRecap = useCallback(() => {
+    setRecapLoading(true)
+    setRecapError('')
+    setRecapResult(null)
+    api.recap(sessionId, wsPath)
+      .then(res => setRecapResult(res.recap))
+      .catch(err => setRecapError(String(err instanceof Error ? err.message : err)))
+      .finally(() => setRecapLoading(false))
+  }, [sessionId, wsPath])
+
+  const applyRecapAppend = useCallback(() => {
+    if (!recapResult) return
+    const current = text.trim()
+    const next = current ? `${current}\n\n${recapResult}` : recapResult
+    setText(next)
+    void api.updateSession(sessionId, { storyMemory: next }).then(reload).catch(() => {})
+    setRecapResult(null)
+  }, [sessionId, text, recapResult, reload])
+
+  const applyRecapReplace = useCallback(() => {
+    if (!recapResult) return
+    setText(recapResult)
+    void api.updateSession(sessionId, { storyMemory: recapResult }).then(reload).catch(() => {})
+    setRecapResult(null)
+  }, [sessionId, recapResult, reload])
+
+
 
   useEffect(() => {
     ref.current?.focus()
@@ -811,6 +939,15 @@ function MemoryTray({ sessionId, memory, reload, onClose }: {
       <div className="rp-tray-header">
         <span className="rp-tray-title">{t('rp.dock.memory')}</span>
         <div className="rp-tray-actions">
+          <button
+            type="button"
+            className="rp-btn-subtle rp-btn-recap"
+            disabled={recapLoading}
+            onClick={triggerRecap}
+            title={t('rp.dock.memory.recapTitle')}
+          >
+            {recapLoading ? t('rp.dock.memory.recapping') : t('rp.dock.memory.recap')}
+          </button>
           {text.trim() ? (
             <button type="button" className="rp-btn-subtle" onClick={clear}>
               {t('rp.dock.instruction.clear')}
@@ -831,6 +968,24 @@ function MemoryTray({ sessionId, memory, reload, onClose }: {
           </button>
         ))}
       </div>
+      {recapError ? <div className="rp-error" style={{ marginBottom: 6 }}>{recapError}</div> : null}
+      {recapResult ? (
+        <div className="rp-recap-preview">
+          <div className="rp-recap-header">
+            <span className="rp-recap-title">{t('rp.dock.memory.recapDone')}</span>
+            <div className="rp-tray-actions">
+              <button type="button" className="rp-btn-subtle" onClick={applyRecapAppend}>
+                {t('rp.dock.memory.recapAppend')}
+              </button>
+              <button type="button" className="rp-btn-subtle" onClick={applyRecapReplace}>
+                {t('rp.dock.memory.recapReplace')}
+              </button>
+              <button type="button" className="rp-popover-close" onClick={() => setRecapResult(null)}>×</button>
+            </div>
+          </div>
+          <pre className="rp-recap-text">{recapResult}</pre>
+        </div>
+      ) : null}
       <textarea
         ref={ref}
         className="rp-textarea"

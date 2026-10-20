@@ -2146,6 +2146,328 @@ body[data-rp-highlight="true"] ::highlight(rp-say) {
   filter: contrast(1.15);
 }
 
+
+/* ── Phase 3: Group Chat, Recap, Inspector Styles ──────────────────── */
+.rp-dock-group-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px dashed var(--yh-border);
+  flex-wrap: wrap;
+}
+
+.rp-group-roster {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.rp-group-pill {
+  cursor: pointer;
+  user-select: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--yh-border);
+  background: var(--yh-neutral-1);
+  color: var(--yh-neutral-8);
+  font-size: 12px;
+  transition: all 0.15s ease;
+}
+
+.rp-group-pill:hover {
+  background: var(--yh-neutral-2);
+  border-color: var(--yh-border-strong);
+  color: var(--yh-neutral-10);
+}
+
+.rp-group-pill.rp-speaker-active {
+  border-color: var(--yh-accent);
+  background: var(--yh-accent-soft);
+  color: var(--yh-accent);
+  font-weight: 600;
+  box-shadow: 0 0 0 1px var(--yh-accent);
+}
+
+.rp-group-crown {
+  font-size: 11px;
+}
+
+.rp-group-remove {
+  cursor: pointer;
+  margin-left: 2px;
+  opacity: 0.45;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.rp-group-remove:hover {
+  opacity: 1;
+  color: var(--yh-error);
+}
+
+.rp-btn-talk-to {
+  font-size: 11px;
+  padding: 3px 8px;
+}
+
+/* ── Inspector Tray ─────────────────────────────────────────────────── */
+.rp-inspector-panel {
+  max-height: 520px;
+  display: flex;
+  flex-direction: column;
+}
+
+.rp-inspector-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rp-inspector-total-badge {
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: var(--yh-accent-soft);
+  color: var(--yh-accent);
+  font-weight: 600;
+}
+
+.rp-inspector-tabs {
+  display: flex;
+  gap: 6px;
+  margin: 6px 0 10px;
+  border-bottom: 1px solid var(--yh-border);
+  padding-bottom: 6px;
+}
+
+.rp-inspector-tab {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 10px;
+  font-size: 12px;
+  color: var(--yh-neutral-7);
+  border-radius: 6px;
+  transition: all 0.15s;
+}
+
+.rp-inspector-tab:hover {
+  color: var(--yh-neutral-10);
+}
+
+.rp-inspector-tab.rp-active {
+  background: var(--yh-neutral-2);
+  color: var(--yh-neutral-10);
+  font-weight: 600;
+}
+
+.rp-progress-bar {
+  height: 12px;
+  border-radius: 6px;
+  display: flex;
+  overflow: hidden;
+  background: var(--yh-neutral-2);
+  margin: 8px 0 12px;
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.06);
+}
+
+.rp-bar-seg {
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+.rp-bar-sys { background: #8a63d2; }
+.rp-bar-char { background: #3f83f8; }
+.rp-bar-lore { background: #0e9f6e; }
+.rp-bar-mem { background: #e3a008; }
+.rp-bar-note { background: #f05252; }
+.rp-bar-hist { background: #9ca3af; }
+
+.rp-inspector-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.rp-stat-card {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--yh-neutral-1);
+  border: 1px solid var(--yh-border);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.rp-stat-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 4px;
+}
+
+.rp-dot-sys { background: #8a63d2; }
+.rp-dot-char { background: #3f83f8; }
+.rp-dot-lore { background: #0e9f6e; }
+.rp-dot-mem { background: #e3a008; }
+.rp-dot-note { background: #f05252; }
+.rp-dot-hist { background: #9ca3af; }
+
+.rp-stat-label {
+  font-size: 11px;
+  color: var(--yh-neutral-6);
+}
+
+.rp-stat-val {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--yh-neutral-9);
+}
+
+.rp-stat-pct {
+  font-size: 10px;
+  color: var(--yh-neutral-5);
+}
+
+.rp-inspector-meta {
+  font-size: 11px;
+  color: var(--yh-neutral-6);
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-top: 6px;
+  border-top: 1px dashed var(--yh-border);
+}
+
+.rp-radar-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.rp-radar-item {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--yh-neutral-1);
+  border: 1px solid var(--yh-border);
+}
+
+.rp-radar-item.rp-matched {
+  border-color: rgba(14, 159, 110, 0.4);
+  background: rgba(14, 159, 110, 0.04);
+}
+
+.rp-radar-item-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rp-radar-badge {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.rp-badge-matched {
+  background: rgba(14, 159, 110, 0.15);
+  color: #0e9f6e;
+}
+
+.rp-badge-constant {
+  background: rgba(63, 131, 248, 0.15);
+  color: #3f83f8;
+}
+
+.rp-badge-idle {
+  background: rgba(156, 163, 175, 0.15);
+  color: #6b7280;
+}
+
+.rp-radar-item-detail {
+  font-size: 11px;
+  color: var(--yh-neutral-6);
+  margin-top: 4px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.rp-radar-hit {
+  color: #0e9f6e;
+  font-weight: 500;
+}
+
+.rp-raw-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.rp-raw-textarea {
+  font-family: monospace;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.rp-recap-preview {
+  margin-top: 8px;
+  padding: 8px;
+  border-radius: 8px;
+  background: var(--yh-neutral-1);
+  border: 1px solid var(--yh-accent-line);
+}
+
+.rp-recap-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.rp-recap-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--yh-accent);
+}
+
+.rp-recap-text {
+  margin: 0;
+  font-family: var(--yh-font-sans);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  color: var(--yh-neutral-8);
+}
+
+.rp-btn-recap {
+  color: var(--yh-accent);
+  font-weight: 500;
+}
+
+.rp-character-pill {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-weight: 600;
+  font-size: 0.9em;
+  background: var(--yh-neutral-2);
+  color: var(--yh-neutral-9);
+  margin-right: 4px;
+}
+
 `
 
 export function injectCss(): void {

@@ -178,3 +178,25 @@ export function createSettingsStore(ctx: Context, live: LiveSettings): SettingsS
     },
   }
 }
+
+
+export function resolveUserIdentity(
+  settings: RoleplaySettings,
+  binding?: { userPersonaId?: string | undefined },
+  card?: { userPersonaId?: string | undefined },
+): { userName: string; userPersona: string } {
+  const personaId = binding?.userPersonaId || card?.userPersonaId
+  if (personaId && settings.userPersonas) {
+    const persona = settings.userPersonas.find(p => p.id === personaId)
+    if (persona) {
+      return {
+        userName: persona.name.trim() || settings.userName,
+        userPersona: persona.persona.trim() || settings.userPersona,
+      }
+    }
+  }
+  return {
+    userName: settings.userName,
+    userPersona: settings.userPersona,
+  }
+}

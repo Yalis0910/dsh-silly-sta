@@ -25,10 +25,23 @@ export interface CardSummary {
   scope: StoreScope
 }
 
+export interface GroupCardSummary {
+  id: string
+  name: string
+  avatarUrl: string | null
+  firstMessage: string
+  alternateGreetings?: string[]
+  updatedAt: number
+}
+
 export interface SessionState {
   binding: {
     mode: string
     characterId?: string
+    groupCardIds?: string[]
+    activeSpeakerId?: string
+    speakerMode?: 'auto' | 'round_robin' | 'manual'
+    customOpening?: string
     userPersonaId?: string
     choiceMode?: boolean
     pendingInstruction?: string
@@ -48,6 +61,7 @@ export interface SessionState {
     lorebookIds?: string[]
     updatedAt: number
   } | null
+  groupCards?: GroupCardSummary[]
   choiceModeDefault: boolean
   userPersonas?: UserPersonaValue[]
   defaultUserName?: string
@@ -78,6 +92,39 @@ export interface LoreEntryValue {
   scanDepth: number
   probability: number
   enabled: boolean
+}
+
+
+export interface LoreInspectEntry {
+  id: string
+  title: string
+  source: string
+  keys: string[]
+  constant: boolean
+  matched: boolean
+  matchedKey?: string
+  position: string
+  contentLength: number
+  estimatedTokens: number
+}
+
+export interface PromptInspectionReport {
+  sessionId: string
+  mode: 'single' | 'group'
+  characters: { id: string; name: string }[]
+  activeSpeaker?: { id: string; name: string }
+  totalEstimatedTokens: number
+  breakdown: {
+    systemRulesTokens: number
+    characterTokens: number
+    lorebookTokens: number
+    storyMemoryTokens: number
+    authorNoteTokens: number
+    historyTokens: number
+  }
+  loreEntries: LoreInspectEntry[]
+  rawPromptPreview: string
+  recentMessagesCount: number
 }
 
 export interface CharacterCardDetail {
@@ -240,12 +287,22 @@ export const api = {
     greetingIndex?: number
     /** The session's workspace path (recorded by the dock); null forgets it. */
     workspacePath?: string | null
+    groupCardIds?: string[]
+    activeSpeakerId?: string | null
+    speakerMode?: 'auto' | 'round_robin' | 'manual'
+    customOpening?: string | null
   }) =>
     request<{ binding: unknown }>(`/session/${encodeURIComponent(sessionId)}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(patch),
     }),
+  recap: (sessionId: string, ws?: string) =>
+    request<{ recap: string }>(withWs(`/session/${encodeURIComponent(sessionId)}/recap`, ws), { method: 'POST' }),
+  fuseGreetings: (sessionId: string, ws?: string) =>
+    request<{ opening: string }>(withWs(`/session/${encodeURIComponent(sessionId)}/fuse-greetings`, ws), { method: 'POST' }),
+  inspectPrompt: (sessionId: string, ws?: string) =>
+    request<PromptInspectionReport>(withWs(`/session/${encodeURIComponent(sessionId)}/inspector`, ws)),
   exportJsonUrl: (id: string, ws?: string) => `${BASE}${withWs(`/cards/${id}/export.json`, ws)}`,
   exportPngUrl: (id: string, ws?: string) => `${BASE}${withWs(`/cards/${id}/export.png`, ws)}`,
   images: (ws?: string) => request<GalleryResponse>(withWs('/images', ws)),

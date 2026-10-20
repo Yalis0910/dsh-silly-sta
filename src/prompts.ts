@@ -215,6 +215,73 @@ export function characterSection(
   return parts.join('\n\n')
 }
 
+/** The multi-character group stage block injected for a group chat session. */
+export function groupCharacterSection(
+  cards: CharacterCard[],
+  activeSpeakerId: string | undefined,
+  userName: string,
+  userPersona: string,
+  recentText: string,
+  fusedOpening?: string,
+  allLore?: LoreEntry[],
+): string {
+  if (cards.length === 0) return ''
+  const activeCard = activeSpeakerId ? cards.find(c => c.id === activeSpeakerId) : undefined
+  const lore = selectLore(allLore ?? cards.flatMap(c => c.book), recentText)
+  const parts: string[] = []
+
+  if (lore.top.length > 0) parts.push(loreSection(lore.top, activeCard?.name ?? '群聊', userName))
+  if (lore.before.length > 0) parts.push(loreSection(lore.before, activeCard?.name ?? '群聊', userName))
+
+  if (activeCard) {
+    // ── Targeted Turn: Single speaker focused, companions in scene ──
+    const macros = (text: string) => applyMacros(text, activeCard.name, userName)
+    const definition: string[] = ['[你当前扮演的主视角角色]', `名字：${activeCard.name}`]
+    const persona = [activeCard.description, activeCard.personality].filter(t => t.trim()).map(macros)
+    if (persona.length > 0) definition.push(`设定：\n${persona.join('\n\n')}`)
+    if (activeCard.scenario.trim()) definition.push(`场景设定：\n${macros(activeCard.scenario)}`)
+    if (activeCard.exampleDialogs.trim()) definition.push(`对话示例：\n${macros(activeCard.exampleDialogs)}`)
+    parts.push(definition.join('\n\n'))
+
+    const companions = cards.filter(c => c.id !== activeCard.id)
+    if (companions.length > 0) {
+      const companionList = companions.map(c => {
+        const desc = [c.description, c.personality].filter(t => t.trim()).join('；').slice(0, 150)
+        return `- 【${c.name}】：${applyMacros(desc, c.name, userName)}`
+      }).join('\n')
+      parts.push(`[当前在场同伴]\n除了你（${activeCard.name}）之外，现场还有以下同伴角色在场：\n${companionList}\n你现在必须以【${activeCard.name}】的身份做出回应。可以与在场同伴互动或对话，但发言和行为必须严格符合${activeCard.name}的人设与视角。`)
+    }
+    if (activeCard.systemPrompt.trim()) parts.push(cardRulesSection(activeCard.systemPrompt, activeCard.name, userName))
+  } else {
+    // ── Auto Drama Mode: Multi-character group stage ──
+    const memberProfiles = cards.map((c, index) => {
+      const desc = [c.description, c.personality].filter(t => t.trim()).join('；').slice(0, 220)
+      return `${index + 1}. 【${c.name}】：\n${applyMacros(desc, c.name, userName)}`
+    }).join('\n\n')
+
+    parts.push([
+      `[群聊同台成员名单]`,
+      `当前场景中共有 ${cards.length} 位角色同时在场：`,
+      memberProfiles,
+      '',
+      `[群聊演播规则]`,
+      `- 你同时掌控以上所有在场角色。根据用户【${userName}】的最新发言和现场情节，挑选最合适的一个或多个角色进行自然回应。`,
+      `- 角色开口说话时，必须在每段对白前清晰标注角色前缀，格式形如：\n  【角色名】『……』\n  或者动作在前、对白紧随其后。严禁输出未标明说话人的模糊台词。`,
+      `- 各角色必须严格遵循其各自的性格、关系和立场，允许角色之间搭话、争辩或合作，展现生动的多人互动场面。`,
+    ].join('\n'))
+  }
+
+  if (userPersona.trim()) parts.push(`[用户设定]\n${userName}：${userPersona}`)
+  if (lore.after.length > 0) parts.push(loreSection(lore.after, activeCard?.name ?? '群聊', userName))
+
+  const opening = fusedOpening?.trim() || cards[0]?.firstMessage?.trim()
+  if (opening) {
+    parts.push(`[开场场景]\n对话由这段开场白/初始场景开始（用户已读过，不要重复它，衔接其后的剧情推进即可）：\n${applyMacros(opening, activeCard?.name ?? cards[0]?.name ?? '', userName)}`)
+  }
+
+  return parts.join('\n\n')
+}
+
 /**
  * The card's own `system_prompt`. The interchange format has it replace the
  * frontend's system prompt; appending it keeps this mode's standing rules

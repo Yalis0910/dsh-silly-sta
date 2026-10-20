@@ -19,6 +19,8 @@ import type { RegexScriptValue } from './api.ts'
 const SAY_RE = /『[^『』\n]*』|「[^「」\n]*」|“[^“”\n]*”/g
 /** Inner thoughts: full-width （…） (half-width stays plain — too common in code/links). */
 const THINK_RE = /（[^（）\n]*）/g
+/** Speaker prefix in group chat: 【…】 */
+const SPEAKER_RE = /(?:^|\n)(?:【[^】\n]+】)/g
 
 /** Replace the card macros with live names (client-side mirror of the host's applyMacros). */
 export function replaceMacros(text: string, charName: string, userName: string): string {

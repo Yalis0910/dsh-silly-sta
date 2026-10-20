@@ -127,11 +127,22 @@ export const UserPersona = z.object({
 })
 export type UserPersona = z.infer<typeof UserPersona>
 
+export const SPEAKER_MODES = ['auto', 'round_robin', 'manual'] as const
+export type SpeakerMode = (typeof SPEAKER_MODES)[number]
+
 /** Per-session role-play state. */
 export const SessionBinding = z.object({
   sessionId: z.string(),
   mode: z.enum(['roleplay', 'forge']),
   characterId: z.string().optional(),
+  /** Member character IDs when this session is in group chat mode (2+ characters). */
+  groupCardIds: z.array(z.string()).default([]),
+  /** Currently designated active speaker character ID (or undefined for auto/all). */
+  activeSpeakerId: z.string().optional(),
+  /** Speaker alternation strategy in group mode. */
+  speakerMode: z.enum(SPEAKER_MODES).default('auto'),
+  /** AI-synthesized or custom fused opening scene for group chat. */
+  customOpening: z.string().optional(),
   /** Active player persona ID for this session (overrides card default). */
   userPersonaId: z.string().optional(),
   /** One-shot stage direction appended to the NEXT user message, then cleared. */
