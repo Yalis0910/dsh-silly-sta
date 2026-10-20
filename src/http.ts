@@ -278,6 +278,27 @@ async function route(req: IncomingMessage, res: ServerResponse, service: Rolepla
     }
   }
 
+  const sessionActionMatch = path.match(/^\/session\/([A-Za-z0-9._-]+)\/(recap|fuse-greetings|inspector)$/)
+  if (sessionActionMatch) {
+    const sessionId = sessionActionMatch[1]!
+    const action = sessionActionMatch[2]!
+    if (action === 'recap' && method === 'POST') {
+      const result = await service.generateRecap(sessionId, ws)
+      sendJson(res, 200, result)
+      return
+    }
+    if (action === 'fuse-greetings' && method === 'POST') {
+      const result = await service.fuseGroupGreetings(sessionId, ws)
+      sendJson(res, 200, result)
+      return
+    }
+    if (action === 'inspector' && method === 'GET') {
+      const result = await service.inspectSessionPrompt(sessionId, ws)
+      sendJson(res, 200, result)
+      return
+    }
+  }
+
   // ── gallery ──
   if (path === '/images' && method === 'GET') {
     sendJson(res, 200, await service.listImages(ws))

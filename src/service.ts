@@ -936,12 +936,14 @@ export class RoleplayService extends Service {
   }
 
   private resolveModelTarget(sessionId: string): { provider: string; model: string } | undefined {
-    const agent = (this.ctx as any).agents?.get(sessionId)
+    const agents = this.ctx.get('agents') as any
+    const agent = agents?.get?.(sessionId)
     const latest = agent?.session?.requestHeader?.()?.config
     if (latest?.provider && latest?.model) return { provider: latest.provider, model: latest.model }
     const options = agent?.options
     if (options?.provider && options?.model) return { provider: options.provider, model: options.model }
-    const providers = (this.ctx as any).llm?.listProviders() ?? []
+    const llm = this.ctx.get('llm') as any
+    const providers = llm?.listProviders?.() ?? []
     for (const p of providers) {
       if (p.models && p.models.length > 0) {
         return { provider: p.id, model: p.models[0].id }
@@ -951,7 +953,8 @@ export class RoleplayService extends Service {
   }
 
   private getSessionRecentMessages(sessionId: string, count = 20): { role: string; text: string }[] {
-    const agent = (this.ctx as any).agents?.get(sessionId)
+    const agents = this.ctx.get('agents') as any
+    const agent = agents?.get?.(sessionId)
     if (!agent?.session?.deriveMessages) return []
     const derived = agent.session.deriveMessages()
     const result: { role: string; text: string }[] = []
@@ -1003,7 +1006,9 @@ export class RoleplayService extends Service {
 ${dialogueText}`
 
     const assembler = new BlockAssembler()
-    const stream = (this.ctx as any).llm.stream({
+    const llm = this.ctx.get('llm') as any
+    if (!llm?.stream) throw new Error('LLM 服务未就绪')
+    const stream = llm.stream({
       provider: target.provider,
       model: target.model,
       messages: [{ role: 'user', content: [{ type: 'text', text: promptText }] }],
@@ -1050,7 +1055,9 @@ ${charSnippets}
 4. 篇幅 300~600 字，直接输出融合后的开场白正文，不要任何前言、总结或解释。`
 
     const assembler = new BlockAssembler()
-    const stream = (this.ctx as any).llm.stream({
+    const llm = this.ctx.get('llm') as any
+    if (!llm?.stream) throw new Error('LLM 服务未就绪')
+    const stream = llm.stream({
       provider: target.provider,
       model: target.model,
       messages: [{ role: 'user', content: [{ type: 'text', text: promptText }] }],

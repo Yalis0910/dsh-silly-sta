@@ -712,7 +712,7 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
       title={t('rp.dock.inspector.title')}
       onClick={() => setActiveTray(prev => (prev === 'inspector' ? 'none' : 'inspector'))}
     >
-      🔍 {t('rp.dock.inspector')}
+      {t('rp.dock.inspector')}
     </button>
   ) : null
 
