@@ -82,6 +82,7 @@ async function route(req: IncomingMessage, res: ServerResponse, service: Rolepla
         avatarUrl: service.avatarUrl(card, card.scope, ws) ?? null,
         bookEntries: card.book.length,
         userPersonaId: card.userPersonaId,
+        lorebookIds: card.lorebookIds ?? [],
         scope: card.scope,
       })),
     })
@@ -168,6 +169,69 @@ async function route(req: IncomingMessage, res: ServerResponse, service: Rolepla
     }
   }
 
+  // ── lorebooks ──
+  if (path === '/lorebooks' && method === 'GET') {
+    sendJson(res, 200, {
+      lorebooks: service.listLorebooks(ws).map(book => ({
+        id: book.id,
+        name: book.name,
+        description: book.description,
+        entriesCount: book.entries.length,
+        createdAt: book.createdAt,
+        updatedAt: book.updatedAt,
+        scope: book.scope,
+      })),
+    })
+    return
+  }
+  if (path === '/lorebooks' && method === 'POST') {
+    const book = await service.saveLorebook(
+      JSON.parse((await readBody(req)).toString('utf8')),
+      { store: service.settings.get().cardStore, wsPath: ws },
+    )
+    sendJson(res, 200, { book })
+    return
+  }
+  if (path === '/lorebooks/import' && method === 'POST') {
+    const book = await service.importLorebook(await readBody(req), ws)
+    const scope = service.lorebookScope(book.id, ws) ?? 'global'
+    sendJson(res, 200, { book, scope })
+    return
+  }
+
+  const lorebookMatch = path.match(/^\/lorebooks\/([A-Za-z0-9-]+)(\/.*)?$/)
+  if (lorebookMatch) {
+    const id = lorebookMatch[1]!
+    const rest = lorebookMatch[2] ?? ''
+    const scopeOf = () => service.lorebookScope(id, ws) ?? 'global'
+    if (rest === '' && method === 'GET') {
+      const book = service.getLorebook(id, ws)
+      if (!book) return sendJson(res, 404, { error: 'lorebook not found' })
+      sendJson(res, 200, { book, scope: scopeOf() })
+      return
+    }
+    if (rest === '' && method === 'PUT') {
+      const body = JSON.parse((await readBody(req)).toString('utf8')) as object
+      const book = await service.saveLorebook({ ...service.getLorebook(id, ws), ...body, id }, { wsPath: ws })
+      sendJson(res, 200, { book })
+      return
+    }
+    if (rest === '' && method === 'DELETE') {
+      sendJson(res, 200, { deleted: await service.deleteLorebook(id, ws) })
+      return
+    }
+    if (rest === '/export.json' && method === 'GET') {
+      const book = service.getLorebook(id, ws)
+      if (!book) return sendJson(res, 404, { error: 'lorebook not found' })
+      res.writeHead(200, {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(book.name)}.json`,
+      })
+      res.end(service.exportLorebookJson(id, ws))
+      return
+    }
+  }
+
   // ── session bindings ──
   const sessionMatch = path.match(/^\/session(?:\/([A-Za-z0-9._-]*))?$/)
   if (sessionMatch) {
@@ -189,6 +253,7 @@ async function route(req: IncomingMessage, res: ServerResponse, service: Rolepla
               avatarUrl: service.avatarUrl(card, cardScope, cardWs) ?? null,
               regexScripts: card.regexScripts,
               userPersonaId: card.userPersonaId,
+              lorebookIds: card.lorebookIds ?? [],
               updatedAt: card.updatedAt,
             }
           : null,

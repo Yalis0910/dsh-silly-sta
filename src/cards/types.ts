@@ -12,7 +12,7 @@ export const LORE_POSITIONS = [
 ] as const
 export type LorePosition = (typeof LORE_POSITIONS)[number]
 
-/** One lorebook entry carried by a character card. */
+/** One lorebook entry carried by a character card or standalone lorebook. */
 export const LoreEntry = z.object({
   id: z.string(),
   /** Display title; also rendered as the section header on injection. */
@@ -36,6 +36,17 @@ export const LoreEntry = z.object({
   enabled: z.boolean().default(true),
 })
 export type LoreEntry = z.infer<typeof LoreEntry>
+
+/** One standalone lorebook that can be shared across multiple character cards. */
+export const StandaloneLorebook = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string().default(''),
+  entries: z.array(LoreEntry).default([]),
+  createdAt: z.number().int().default(0),
+  updatedAt: z.number().int().default(0),
+})
+export type StandaloneLorebook = z.infer<typeof StandaloneLorebook>
 
 /**
  * One regex script carried by a card (interchange-compatible subset).
@@ -95,9 +106,10 @@ export const CharacterCard = z.object({
   characterVersion: z.string().default(''),
   tags: z.array(z.string()).default([]),
   book: z.array(LoreEntry).default([]),
+  /** Mounted standalone lorebook IDs. */
+  lorebookIds: z.array(z.string()).default([]),
   /** Card-carried regex scripts (display coloring on the client). */
   regexScripts: z.array(RegexScript).default([]),
-  /** File name under the data dir's avatars/ folder, when an avatar exists. */
   /** Optional player persona ID assigned to this character. */
   userPersonaId: z.string().optional(),
   avatar: z.string().optional(),
@@ -126,6 +138,8 @@ export const SessionBinding = z.object({
   pendingInstruction: z.string().optional(),
   /** Persistent scene direction / mood / atmosphere (Author's Note), active across turns until cleared. */
   authorNote: z.string().optional(),
+  /** Persistent story milestones, promises, secrets and facts to prevent long-term forgetting. */
+  storyMemory: z.string().optional(),
   /** Selected opening greeting index: 0 = firstMessage, 1..N = alternateGreetings[index - 1]. */
   greetingIndex: z.number().int().min(0).default(0),
   /** Filesystem path of the session's workspace (recorded by the dock; used for workspace-scoped stores). */

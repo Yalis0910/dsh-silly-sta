@@ -9,8 +9,8 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { isAbsolute, join, parse, resolve } from 'node:path'
 import { Service, type Context } from '@deepseek-ai/cordis'
 import { defineDomain, domainTable, type Domain } from '@deepseek-ai/dsh-storage-domain'
-import { CharacterCard, GeneratedImage, SessionBinding } from './cards/types.ts'
-import { cardFromInterchange, cardFromPng, cardToInterchange, cardToPng } from './cards/codec.ts'
+import { CharacterCard, GeneratedImage, SessionBinding, StandaloneLorebook, type LoreEntry } from './cards/types.ts'
+import { cardFromInterchange, cardFromPng, cardToInterchange, cardToPng, lorebookFromInterchange, lorebookToInterchange } from './cards/codec.ts'
 import { encodeSolidPng, isPng } from './cards/png.ts'
 import type { SettingsStore } from './settings.ts'
 
@@ -27,6 +27,7 @@ const domainSpec = defineDomain({
     cards: domainTable<string, CharacterCard>(CharacterCard),
     sessions: domainTable<string, SessionBinding>(SessionBinding),
     images: domainTable<string, GeneratedImage>(GeneratedImage),
+    lorebooks: domainTable<string, StandaloneLorebook>(StandaloneLorebook),
   },
 })
 
@@ -48,6 +49,7 @@ export class RoleplayService extends Service {
   async start(): Promise<void> {
     await mkdir(join(this.dataDir, 'avatars'), { recursive: true })
     await mkdir(join(this.dataDir, 'images'), { recursive: true })
+    await mkdir(join(this.dataDir, 'lorebooks'), { recursive: true })
     this.domain = await this.ctx.storageDomain.open(domainSpec)
     this.ctx.effect(() => () => void this.domain.close())
   }
@@ -70,6 +72,7 @@ export class RoleplayService extends Service {
     await mkdir(join(root, 'cards'), { recursive: true })
     await mkdir(join(root, 'avatars'), { recursive: true })
     await mkdir(join(root, 'images'), { recursive: true })
+    await mkdir(join(root, 'lorebooks'), { recursive: true })
   }
 
   private readWsCard(root: string, id: string): CharacterCard | undefined {
@@ -102,6 +105,37 @@ export class RoleplayService extends Service {
     await this.ensureWsDirs(root)
     await writeFile(join(root, 'cards', `${card.id}.json`), JSON.stringify(card, null, 2))
   }
+
+  private readWsLorebook(root: string, id: string): StandaloneLorebook | undefined {
+    if (!/^[A-Za-z0-9-]+$/.test(id)) return undefined
+    try {
+      return StandaloneLorebook.parse(JSON.parse(readFileSync(join(root, 'lorebooks', `${id}.json`), 'utf8')))
+    } catch {
+      return undefined
+    }
+  }
+
+  private listWsLorebooks(root: string): StandaloneLorebook[] {
+    let files: string[]
+    try {
+      files = readdirSync(join(root, 'lorebooks'))
+    } catch {
+      return []
+    }
+    const books: StandaloneLorebook[] = []
+    for (const file of files) {
+      if (!file.endsWith('.json')) continue
+      const book = this.readWsLorebook(root, file.slice(0, -'.json'.length))
+      if (book) books.push(book)
+    }
+    return books.sort((a, b) => b.createdAt - a.createdAt)
+  }
+
+  private async writeWsLorebook(root: string, book: StandaloneLorebook): Promise<void> {
+    await this.ensureWsDirs(root)
+    await writeFile(join(root, 'lorebooks', `${book.id}.json`), JSON.stringify(book, null, 2))
+  }
+
 
   /** Find a card and where it lives; global wins over the workspace on id collisions. */
   locateCard(id: string, wsPath?: string): { card: CharacterCard; scope: StoreScope; root?: string } | undefined {
@@ -151,7 +185,7 @@ export class RoleplayService extends Service {
     if (!isAbsolute(wsPath) || sub.split(/[\\/]/).some(part => part === '' || part === '.' || part === '..')) return false
     const root = join(wsPath, sub)
     if (existsSync(join(root, 'images.json'))) return true
-    for (const kind of ['cards', 'avatars', 'images'] as const) {
+    for (const kind of ['cards', 'avatars', 'images', 'lorebooks'] as const) {
       try {
         if ((await readdir(join(root, kind))).length > 0) return true
       } catch {
@@ -181,7 +215,7 @@ export class RoleplayService extends Service {
       await rename(from, to)
       return { moved: true }
     }
-    for (const kind of ['cards', 'avatars', 'images'] as const) {
+    for (const kind of ['cards', 'avatars', 'images', 'lorebooks'] as const) {
       let files: string[]
       try {
         files = await readdir(join(from, kind))
@@ -446,6 +480,107 @@ export class RoleplayService extends Service {
     return cardToPng(located.card, portrait)
   }
 
+
+  // ── lorebooks ─────────────────────────────────────────────────────────────
+
+  locateLorebook(id: string, wsPath?: string): { book: StandaloneLorebook; scope: StoreScope; root?: string } | undefined {
+    const global = this.domain.table('lorebooks').get(id)
+    if (global) return { book: global, scope: 'global' }
+    const root = this.wsRoot(wsPath)
+    if (root) {
+      const book = this.readWsLorebook(root, id)
+      if (book) return { book, scope: 'workspace', root }
+    }
+    return undefined
+  }
+
+  listLorebooks(wsPath?: string): (StandaloneLorebook & { scope: StoreScope })[] {
+    const global = [...this.domain.table('lorebooks').entries()]
+      .map(([, book]) => ({ ...book, scope: 'global' as const }))
+      .sort((a, b) => b.createdAt - a.createdAt)
+    const root = this.wsRoot(wsPath)
+    const workspace = root
+      ? this.listWsLorebooks(root).map(book => ({ ...book, scope: 'workspace' as const }))
+      : []
+    return [...global, ...workspace]
+  }
+
+  getLorebook(id: string, wsPath?: string): StandaloneLorebook | undefined {
+    return this.locateLorebook(id, wsPath)?.book
+  }
+
+  lorebookScope(id: string, wsPath?: string): StoreScope | undefined {
+    return this.locateLorebook(id, wsPath)?.scope
+  }
+
+  async saveLorebook(
+    raw: unknown,
+    opts?: { store?: StoreScope | undefined; wsPath?: string | undefined },
+  ): Promise<StandaloneLorebook> {
+    const now = Date.now()
+    const input = StandaloneLorebook.parse({
+      createdAt: now,
+      updatedAt: now,
+      ...(typeof raw === 'object' && raw !== null ? raw : {}),
+      id: (raw as { id?: string })?.id || randomUUID(),
+    })
+    const located = this.locateLorebook(input.id, opts?.wsPath)
+    const book: StandaloneLorebook = {
+      ...input,
+      createdAt: located?.book.createdAt ?? now,
+      updatedAt: now,
+    }
+    const root = located?.scope === 'workspace'
+      ? located.root
+      : located ? undefined : (opts?.store === 'workspace' ? this.wsRoot(opts?.wsPath) : undefined)
+    if (root) {
+      await this.writeWsLorebook(root, book)
+    } else {
+      await this.domain.table('lorebooks').put(book.id, book)
+    }
+    return book
+  }
+
+  async deleteLorebook(id: string, wsPath?: string): Promise<boolean> {
+    const located = this.locateLorebook(id, wsPath)
+    if (!located) return false
+    const { scope, root } = located
+    if (scope === 'workspace' && root) {
+      await rm(join(root, 'lorebooks', `${id}.json`), { force: true })
+      return true
+    }
+    return this.domain.table('lorebooks').delete(id)
+  }
+
+  async importLorebook(bytes: Buffer, wsPath?: string): Promise<StandaloneLorebook> {
+    const json = JSON.parse(bytes.toString('utf8')) as unknown
+    const parsed = lorebookFromInterchange(json)
+    return this.saveLorebook(parsed, { store: this.settings.get().cardStore, wsPath })
+  }
+
+  exportLorebookJson(id: string, wsPath?: string): string {
+    const book = this.getLorebook(id, wsPath)
+    if (!book) throw new Error(`unknown lorebook ${id}`)
+    return JSON.stringify(lorebookToInterchange(book), null, 2)
+  }
+
+  /**
+   * Resolves all lore entries for a character card, merging its own entries with
+   * all entries from mounted standalone lorebooks.
+   */
+  resolveCardAllLore(card: CharacterCard, wsPath?: string): LoreEntry[] {
+    const ownEntries = card.book ?? []
+    if (!card.lorebookIds || card.lorebookIds.length === 0) return ownEntries
+    const all = [...ownEntries]
+    for (const lbId of card.lorebookIds) {
+      const lb = this.getLorebook(lbId, wsPath)
+      if (lb?.entries) {
+        all.push(...lb.entries)
+      }
+    }
+    return all
+  }
+
   // ── session bindings ─────────────────────────────────────────────────────
 
   getBinding(sessionId: string): SessionBinding | undefined {
@@ -454,12 +589,14 @@ export class RoleplayService extends Service {
 
   async updateBinding(
     sessionId: string,
-    patch: Partial<Omit<SessionBinding, 'characterId' | 'pendingInstruction' | 'authorNote' | 'workspacePath'>> & {
+    patch: Partial<Omit<SessionBinding, 'characterId' | 'pendingInstruction' | 'authorNote' | 'storyMemory' | 'workspacePath'>> & {
       characterId?: string | null
       /** null clears the staged one-shot instruction. */
       pendingInstruction?: string | null
       /** null clears the persistent Author's Note. */
       authorNote?: string | null
+      /** null clears the persistent story memory. */
+      storyMemory?: string | null
       greetingIndex?: number
       /** null forgets the recorded workspace path. */
       workspacePath?: string | null
@@ -474,7 +611,7 @@ export class RoleplayService extends Service {
       updatedAt: Date.now(),
     }
     // null = "remove the override": the schema keeps these keys absent.
-    for (const key of ['characterId', 'userPersonaId', 'pendingInstruction', 'authorNote', 'workspacePath'] as const) {
+    for (const key of ['characterId', 'userPersonaId', 'pendingInstruction', 'authorNote', 'storyMemory', 'workspacePath'] as const) {
       if (merged[key] === null || merged[key] === '') delete merged[key]
     }
     const next = SessionBinding.parse(merged)

@@ -4,7 +4,7 @@
  *  - the save_character_card tool view (interactive result card in forge chats)
  */
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
-import { api, stampedUrl, type CharacterCardDetail, type LoreEntryValue, type RegexScriptValue, type UserPersonaValue } from './api.ts'
+import { api, stampedUrl, type CharacterCardDetail, type LorebookSummary, type LoreEntryValue, type RegexScriptValue, type UserPersonaValue } from './api.ts'
 import { compileCardRules, toHexColor, withColorValue } from './colorize.tsx'
 import { useT, tf } from './i18n.ts'
 
@@ -49,6 +49,12 @@ export function CardEditor({ cardId, onClose, onDeleted, onSaved, ws }: {
   useEffect(() => {
     api.settings().then(res => setPersonas(res.value.userPersonas ?? [])).catch(() => {})
   }, [])
+  const [availableLorebooks, setAvailableLorebooks] = useState<LorebookSummary[]>([])
+
+  useEffect(() => {
+    api.lorebooks(ws).then(res => setAvailableLorebooks(res.lorebooks)).catch(() => {})
+  }, [ws])
+
 
   const reload = useCallback(() => {
     setNotice('')
@@ -293,6 +299,45 @@ export function CardEditor({ cardId, onClose, onDeleted, onSaved, ws }: {
 
       {tab === 'book' ? (
         <div className="rp-editor-tab-pane">
+          <div className="rp-editor-pane-head" style={{ marginBottom: 6 }}>
+            <div>
+              <span className="rp-cardname" style={{ fontSize: 13 }}>{t('rp.editor.mountedLorebooks')}</span>
+              <span className="rp-note" style={{ display: 'block', marginTop: 2 }}>{t('rp.editor.mountedLorebooks.hint')}</span>
+            </div>
+          </div>
+          {availableLorebooks.length === 0 ? (
+            <span className="rp-note" style={{ display: 'block', marginBottom: 12 }}>
+              {t('rp.editor.mountedLorebooks.none')}
+            </span>
+          ) : (
+            <div className="rp-mounted-lb-list" style={{ marginBottom: 16 }}>
+              {availableLorebooks.map(lb => {
+                const mounted = (card.lorebookIds ?? []).includes(lb.id)
+                return (
+                  <label key={lb.id} className="rp-mounted-lb-item">
+                    <input
+                      type="checkbox"
+                      checked={mounted}
+                      onChange={e => {
+                        const current = card.lorebookIds ?? []
+                        const next = e.target.checked
+                          ? [...current, lb.id]
+                          : current.filter(id => id !== lb.id)
+                        patch({ lorebookIds: next })
+                      }}
+                    />
+                    <span className={`rp-scope-tag rp-scope-${lb.scope}`}>
+                      {lb.scope === 'global' ? t('rp.scope.global') : t('rp.scope.workspace')}
+                    </span>
+                    <span>{lb.name}</span>
+                    <span className="rp-muted" style={{ fontSize: 12 }}>({lb.entriesCount}{t('rp.cards.lore')})</span>
+                    {lb.description ? <span className="rp-muted" style={{ fontSize: 12 }}>— {lb.description}</span> : null}
+                  </label>
+                )
+              })}
+            </div>
+          )}
+
           <div className="rp-editor-pane-head">
             <h4>{t('rp.editor.book')}</h4>
             <span className="rp-spacer" />

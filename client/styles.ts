@@ -2055,6 +2055,97 @@ body:not([data-rp-active="1"]) [data-chat-flow-kind="tool-call"][data-turn-proce
     grid-template-columns: 1fr;
   }
 }
+
+/* ── Swipe branching ── */
+.rp-swipe-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  background: var(--yh-neutral-1);
+  border: 1px solid var(--yh-border);
+  border-radius: 14px;
+  padding: 1px 4px;
+  font-size: 11px;
+  color: var(--yh-neutral-7);
+  user-select: none;
+}
+.rp-swipe-btn {
+  background: none;
+  border: none;
+  padding: 0 4px;
+  cursor: pointer;
+  color: var(--yh-neutral-7);
+  font-size: 13px;
+  line-height: 18px;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+}
+.rp-swipe-btn:hover:not(:disabled) {
+  background: var(--yh-neutral-3);
+  color: var(--yh-neutral-10);
+}
+.rp-swipe-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+.rp-swipe-num {
+  font-feature-settings: 'tnum';
+  padding: 0 3px;
+  font-size: 11px;
+}
+
+/* ── Mounted lorebooks & Worldbook manager ── */
+.rp-mounted-lb-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--yh-neutral-1);
+  border: 1px solid var(--yh-border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-top: 6px;
+}
+.rp-mounted-lb-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--yh-neutral-9);
+  cursor: pointer;
+}
+
+/* ── Typography & reading customization ── */
+body[data-rp-font-size="13"] [data-chat-flow-kind="assistant-step"],
+body[data-rp-font-size="13"] .rp-opening-body {
+  font-size: 13px !important;
+  line-height: 1.65 !important;
+}
+body[data-rp-font-size="15"] [data-chat-flow-kind="assistant-step"],
+body[data-rp-font-size="15"] .rp-opening-body {
+  font-size: 15px !important;
+  line-height: 1.75 !important;
+}
+body[data-rp-font-size="16"] [data-chat-flow-kind="assistant-step"],
+body[data-rp-font-size="16"] .rp-opening-body {
+  font-size: 16px !important;
+  line-height: 1.8 !important;
+}
+
+body[data-rp-font="serif"] [data-chat-flow-kind="assistant-step"],
+body[data-rp-font="serif"] .rp-opening-body {
+  font-family: 'Songti SC', 'SimSun', 'Noto Serif SC', 'Source Han Serif SC', serif !important;
+}
+body[data-rp-font="sans"] [data-chat-flow-kind="assistant-step"],
+body[data-rp-font="sans"] .rp-opening-body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC', 'Microsoft YaHei', sans-serif !important;
+}
+
+body[data-rp-highlight="true"] .rp-say,
+body[data-rp-highlight="true"] ::highlight(rp-say) {
+  font-weight: 550 !important;
+  filter: contrast(1.15);
+}
+
 `
 
 export function injectCss(): void {

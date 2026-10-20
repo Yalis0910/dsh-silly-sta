@@ -1,7 +1,7 @@
 /** The「角色扮演」settings page: user identity, storage, gallery and card library + sub-pages. */
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { IconQuestionOutlineRegular, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
-import { api, formatBytes, stampedUrl, type CardSummary, type GalleryUsage, type RoleplaySettingsValue, type StoreScope, type UserPersonaValue } from './api.ts'
+import { api, formatBytes, stampedUrl, type CardSummary, type GalleryUsage, type LorebookDetail, type LorebookSummary, type LoreEntryValue, type RoleplaySettingsValue, type StoreScope, type UserPersonaValue } from './api.ts'
 import { CardEditor } from './card-editor.tsx'
 import { ImageGalleryPage } from './gallery.tsx'
 import { currentWorkspace, subscribeWorkspaces, type WorkspaceInfo } from './runtime.ts'
@@ -136,6 +136,7 @@ export function RoleplaySettingsSection(): ReactNode {
       {tab === 'cards' ? (
         <div className="rp-settings-tab-pane">
           <CardManager onEdit={setEditing} ws={ws} />
+          <LorebookManager ws={ws} />
           <GalleryEntry onOpen={() => setGallery(true)} ws={ws?.path} />
         </div>
       ) : null}
@@ -175,6 +176,59 @@ export function RoleplaySettingsSection(): ReactNode {
                   onChange={event => patch({ choiceCount: Math.min(8, Math.max(2, Number(event.target.value) || 2)) })}
                 />
               </Field>
+            </div>
+          </div>
+
+
+          <div>
+            <h4>{t('rp.typo.heading')}</h4>
+            <div className="rp-inline">
+              <Field label={t('rp.typo.fontSize')}>
+                <select
+                  value={draft.readingFontSize ?? '14'}
+                  onChange={event => {
+                    const val = event.target.value as '13' | '14' | '15' | '16'
+                    patch({ readingFontSize: val })
+                    document.body.dataset.rpFontSize = val
+                  }}
+                >
+                  <option value="13">13px</option>
+                  <option value="14">14px (默认)</option>
+                  <option value="15">15px</option>
+                  <option value="16">16px</option>
+                </select>
+              </Field>
+              <Field label={t('rp.typo.fontFamily')}>
+                <select
+                  value={draft.readingFontFamily ?? 'default'}
+                  onChange={event => {
+                    const val = event.target.value as 'default' | 'serif' | 'sans'
+                    patch({ readingFontFamily: val })
+                    document.body.dataset.rpFont = val
+                  }}
+                >
+                  <option value="default">{t('rp.typo.fontFamily.default')}</option>
+                  <option value="serif">{t('rp.typo.fontFamily.serif')}</option>
+                  <option value="sans">{t('rp.typo.fontFamily.sans')}</option>
+                </select>
+              </Field>
+            </div>
+            <div className="rp-field" style={{ marginTop: 8 }}>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={draft.dialogueHighlight !== false}
+                  onChange={event => {
+                    const val = event.target.checked
+                    patch({ dialogueHighlight: val })
+                    document.body.dataset.rpHighlight = val ? 'true' : 'false'
+                  }}
+                />
+                {' '}{t('rp.typo.dialogueHighlight')}
+              </label>
+              <span className="rp-note" style={{ display: 'block', marginTop: 4 }}>
+                {t('rp.typo.dialogueHighlight.hint')}
+              </span>
             </div>
           </div>
 
@@ -655,3 +709,261 @@ function CardManager({ onEdit, ws }: { onEdit: (cardId: string) => void; ws: Wor
     </div>
   )
 }
+
+function LorebookManager({ ws }: { ws: WorkspaceInfo | undefined }): ReactNode {
+  const t = useT()
+  const [lorebooks, setLorebooks] = useState<LorebookSummary[] | null>(null)
+  const [editingBook, setEditingBook] = useState<LorebookDetail['book'] | null>(null)
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const fileRef = useRef<HTMLInputElement | null>(null)
+  const wsPath = ws?.path
+
+  const reload = useCallback(() => {
+    api.lorebooks(wsPath)
+      .then(res => setLorebooks(res.lorebooks))
+      .catch(err => setError(String(err instanceof Error ? err.message : err)))
+  }, [wsPath])
+
+  useEffect(reload, [reload])
+
+  const importFiles = useCallback(async (files: FileList | null) => {
+    if (!files || files.length === 0) return
+    setBusy(true)
+    setError('')
+    try {
+      for (const file of Array.from(files)) {
+        await api.importLorebook(await file.arrayBuffer(), wsPath)
+      }
+      reload()
+    } catch (err) {
+      setError(String(err instanceof Error ? err.message : err))
+    } finally {
+      setBusy(false)
+      if (fileRef.current) fileRef.current.value = ''
+    }
+  }, [reload, wsPath])
+
+  const startCreate = () => {
+    setEditingBook({
+      id: '',
+      name: '新世界书',
+      description: '',
+      entries: [],
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    })
+  }
+
+  const startEdit = (id: string) => {
+    setBusy(true)
+    api.getLorebook(id, wsPath)
+      .then(res => setEditingBook(res.book))
+      .catch(err => setError(String(err instanceof Error ? err.message : err)))
+      .finally(() => setBusy(false))
+  }
+
+  const saveBook = async () => {
+    if (!editingBook || !editingBook.name.trim()) return
+    setBusy(true)
+    try {
+      if (!editingBook.id) {
+        await api.saveLorebook(editingBook, wsPath)
+      } else {
+        await api.updateLorebook(editingBook.id, editingBook, wsPath)
+      }
+      setEditingBook(null)
+      reload()
+    } catch (err) {
+      setError(String(err instanceof Error ? err.message : err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const removeBook = (lb: LorebookSummary) => {
+    if (window.confirm(tf('rp.lorebooks.deleteConfirm', { name: lb.name }))) {
+      api.deleteLorebook(lb.id, wsPath).then(reload).catch(err => setError(String(err instanceof Error ? err.message : err)))
+    }
+  }
+
+  return (
+    <div className="rp-lorebook-manager" style={{ marginTop: 16 }}>
+      <div className="rp-cardmanager-head">
+        <div>
+          <h4>{t('rp.lorebooks.heading')}</h4>
+          <span className="rp-note" style={{ display: 'block', marginTop: 2 }}>{t('rp.lorebooks.hint')}</span>
+        </div>
+        <div className="rp-actions">
+          <button type="button" className="rp-btn rp-btn-primary" onClick={startCreate}>
+            + {t('rp.lorebooks.add')}
+          </button>
+          <button type="button" className="rp-btn" disabled={busy} onClick={() => fileRef.current?.click()}>
+            {t('rp.lorebooks.import')}
+          </button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".json,application/json"
+            style={{ display: 'none' }}
+            onChange={e => void importFiles(e.target.files)}
+          />
+        </div>
+      </div>
+
+      {error ? <div className="rp-error" style={{ margin: '8px 0' }}>{error}</div> : null}
+
+      {editingBook !== null ? (
+        <div className="rp-persona-editbox" style={{ marginTop: 12 }}>
+          <div className="rp-cardname" style={{ fontSize: 14, marginBottom: 8 }}>{t('rp.lorebooks.editor.title')}</div>
+          <div className="rp-inline">
+            <Field label={t('rp.lorebooks.name')}>
+              <input
+                value={editingBook.name}
+                onChange={e => setEditingBook({ ...editingBook, name: e.target.value })}
+                placeholder={t('rp.lorebooks.name')}
+                autoFocus
+              />
+            </Field>
+            <Field label={t('rp.lorebooks.desc')}>
+              <input
+                value={editingBook.description}
+                onChange={e => setEditingBook({ ...editingBook, description: e.target.value })}
+                placeholder={t('rp.lorebooks.desc')}
+              />
+            </Field>
+          </div>
+
+          <div className="rp-editor-pane-head" style={{ marginTop: 12, marginBottom: 8 }}>
+            <span className="rp-cardname" style={{ fontSize: 13 }}>
+              {t('rp.editor.book')} ({editingBook.entries.length})
+            </span>
+            <span className="rp-spacer" />
+            <button
+              type="button"
+              className="rp-btn"
+              onClick={() => {
+                const newEntry: LoreEntryValue = {
+                  id: `lore-${Date.now()}-${Math.floor(Math.random() * 1e6)}`,
+                  title: '',
+                  content: '',
+                  keys: [],
+                  useRegex: false,
+                  constant: false,
+                  position: 'after_char',
+                  order: editingBook.entries.length * 10 + 100,
+                  depth: 4,
+                  scanDepth: 0,
+                  probability: 100,
+                  enabled: true,
+                }
+                setEditingBook({ ...editingBook, entries: [...editingBook.entries, newEntry] })
+              }}
+            >
+              + {t('rp.editor.book.add')}
+            </button>
+          </div>
+
+          {editingBook.entries.map((entry, idx) => (
+            <div key={entry.id} className="rp-loreentry" style={{ margin: '8px 0' }}>
+              <div className="rp-loreentry-head">
+                <span className="rp-muted">#{idx + 1}</span>
+                <span className="rp-cardname">{entry.title || '（未命名条目）'}</span>
+                <span className="rp-spacer" />
+                <button
+                  type="button"
+                  className="rp-btn"
+                  onClick={() => {
+                    const next = editingBook.entries.filter((_, i) => i !== idx)
+                    setEditingBook({ ...editingBook, entries: next })
+                  }}
+                >
+                  {t('rp.editor.book.remove')}
+                </button>
+              </div>
+              <div className="rp-inline">
+                <Field label={t('rp.editor.book.title')}>
+                  <input
+                    value={entry.title}
+                    onChange={e => {
+                      const next = [...editingBook.entries]
+                      next[idx] = { ...entry, title: e.target.value }
+                      setEditingBook({ ...editingBook, entries: next })
+                    }}
+                  />
+                </Field>
+                <Field label={t('rp.editor.book.keys')}>
+                  <input
+                    value={entry.keys.join(', ')}
+                    onChange={e => {
+                      const next = [...editingBook.entries]
+                      next[idx] = { ...entry, keys: e.target.value.split(/[,，]/).map(k => k.trim()).filter(Boolean) }
+                      setEditingBook({ ...editingBook, entries: next })
+                    }}
+                  />
+                </Field>
+              </div>
+              <Field label={t('rp.editor.book.content')}>
+                <textarea
+                  rows={3}
+                  value={entry.content}
+                  onChange={e => {
+                    const next = [...editingBook.entries]
+                    next[idx] = { ...entry, content: e.target.value }
+                    setEditingBook({ ...editingBook, entries: next })
+                  }}
+                />
+              </Field>
+            </div>
+          ))}
+
+          <div className="rp-actions" style={{ marginTop: 12 }}>
+            <button type="button" className="rp-btn rp-btn-primary" disabled={busy || !editingBook.name.trim()} onClick={saveBook}>
+              {t('rp.editor.save')}
+            </button>
+            <button type="button" className="rp-btn" onClick={() => setEditingBook(null)}>
+              {t('rp.dock.cancel')}
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {lorebooks === null ? (
+        <span className="rp-muted">{t('rp.dock.loading')}</span>
+      ) : lorebooks.length === 0 ? (
+        <span className="rp-note" style={{ display: 'block', marginTop: 4 }}>{t('rp.lorebooks.empty')}</span>
+      ) : (
+        <div className="rp-cardgrid" style={{ marginTop: 8 }}>
+          {lorebooks.map(lb => (
+            <div key={lb.id} className="rp-cardcell" style={{ cursor: 'default' }}>
+              <div className="rp-cardcell-text">
+                <div className="rp-cardname">
+                  <span className={`rp-scope-tag rp-scope-${lb.scope}`}>
+                    {lb.scope === 'global' ? t('rp.scope.global') : t('rp.scope.workspace')}
+                  </span>
+                  <span>{lb.name}</span>
+                  <span className="rp-muted" style={{ fontSize: 12, marginLeft: 6 }}>
+                    ({lb.entriesCount} {t('rp.lorebooks.entries')})
+                  </span>
+                </div>
+                <div className="rp-cardnote">{lb.description || '—'}</div>
+              </div>
+              <div className="rp-actions">
+                <button type="button" className="rp-btn" onClick={() => startEdit(lb.id)}>
+                  {t('rp.lorebooks.edit')}
+                </button>
+                <a className="rp-btn" href={api.exportLorebookUrl(lb.id, wsPath)} download>
+                  {t('rp.lorebooks.export')}
+                </a>
+                <button type="button" className="rp-btn rp-btn-danger" onClick={() => removeBook(lb)}>
+                  {t('rp.lorebooks.delete')}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+

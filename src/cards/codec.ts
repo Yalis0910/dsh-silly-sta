@@ -4,7 +4,7 @@
  * PNG-embedded payloads under the `chara` / `ccv3` keywords).
  */
 import { randomUUID } from 'node:crypto'
-import { CharacterCard, LoreEntry, RegexScript, type LorePosition } from './types.ts'
+import { CharacterCard, LoreEntry, RegexScript, StandaloneLorebook, type LorePosition } from './types.ts'
 import { isPng, readTextChunks, writeTextChunks } from './png.ts'
 
 function asString(value: unknown): string {
@@ -231,3 +231,40 @@ export function cardToPng(card: CharacterCard, portrait: Buffer): Buffer {
     ccv3: Buffer.from(JSON.stringify(v3), 'utf8').toString('base64'),
   })
 }
+
+/** Parse one interchange World Info / Lorebook JSON payload into a StandaloneLorebook. */
+export function lorebookFromInterchange(raw: unknown): StandaloneLorebook {
+  const root = asRecord(raw)
+  if (!root) throw new Error('world info payload is not an object')
+  const name = asString(root.name) || asString(root.title) || '未命名世界书'
+  const description = asString(root.description) || asString(root.comment) || ''
+  const entries = normalizeBook(root)
+  const now = Date.now()
+  return StandaloneLorebook.parse({
+    id: randomUUID(),
+    name,
+    description,
+    entries,
+    createdAt: now,
+    updatedAt: now,
+  })
+}
+
+/** Export a StandaloneLorebook as SillyTavern-compatible World Info JSON. */
+export function lorebookToInterchange(book: StandaloneLorebook): Record<string, unknown> {
+  const entriesObj: Record<string, unknown> = {}
+  book.entries.forEach((entry, idx) => {
+    entriesObj[String(idx)] = {
+      ...loreEntryToInterchange(entry, idx),
+      uid: idx,
+    }
+  })
+  return {
+    name: book.name,
+    description: book.description,
+    scan_depth: 100,
+    token_budget: 2048,
+    entries: entriesObj,
+  }
+}
+

@@ -186,9 +186,10 @@ export function characterSection(
   userPersona: string,
   recentText: string,
   greetingIndex?: number,
+  allLore?: LoreEntry[],
 ): string {
   const macros = (text: string) => applyMacros(text, card.name, userName)
-  const lore = selectLore(card.book, recentText)
+  const lore = selectLore(allLore ?? card.book, recentText)
   const parts: string[] = []
   if (lore.top.length > 0) parts.push(loreSection(lore.top, card.name, userName))
   if (lore.before.length > 0) parts.push(loreSection(lore.before, card.name, userName))

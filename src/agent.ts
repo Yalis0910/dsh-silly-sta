@@ -177,7 +177,8 @@ export function apply(ctx: Context, config: Config): void {
       const identity = resolveUserIdentity(settings, binding, card)
       const parts = [roleplayStandingRules(identity.userName)]
       if (card) {
-        parts.push(characterSection(card, identity.userName, identity.userPersona, recentText(agent), binding?.greetingIndex))
+        const allLore = svc.resolveCardAllLore(card, binding?.workspacePath)
+        parts.push(characterSection(card, identity.userName, identity.userPersona, recentText(agent), binding?.greetingIndex, allLore))
       } else {
         parts.push(unboundHint())
       }
@@ -198,7 +199,8 @@ export function apply(ctx: Context, config: Config): void {
     const card = binding?.characterId ? svc.getCard(binding.characterId, binding.workspacePath) : undefined
     if (!card) return undefined
     const identity = resolveUserIdentity(svc.settings.get(), binding, card)
-    return { card, groups: selectLore(card.book, recentText(agent)), userName: identity.userName }
+    const allLore = svc.resolveCardAllLore(card, binding?.workspacePath)
+    return { card, groups: selectLore(allLore, recentText(agent)), userName: identity.userName }
   }
   ctx.systemPrompt.context({
     name: 'roleplay:lore-depth',
@@ -235,6 +237,20 @@ export function apply(ctx: Context, config: Config): void {
     text: (context) => {
       const lore = loreOf(context)
       return lore ? loreContext(lore.groups.assistantTop, lore.card.name, lore.userName, '[对下一条回复的指示]') : ''
+    },
+  })
+  ctx.systemPrompt.context({
+    name: 'roleplay:story-memory',
+    order: 305,
+    text: (context) => {
+      const svc = service()
+      const agent = agentOf(context)
+      const binding = agent ? svc.getBinding(String(agent.id)) : undefined
+      const memory = binding?.storyMemory?.trim()
+      if (!memory) return ''
+      const card = binding?.characterId ? svc.getCard(binding.characterId, binding.workspacePath) : undefined
+      const identity = resolveUserIdentity(svc.settings.get(), binding, card)
+      return `[剧情核心备忘录]\n以下是此前剧情确立的核心事实、重大承诺与关键现状，必须严格遵守，保持情节前后连贯：\n${applyMacros(memory, card?.name ?? '', identity.userName)}`
     },
   })
   ctx.systemPrompt.context({

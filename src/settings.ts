@@ -39,6 +39,12 @@ export interface RoleplaySettings {
   choiceMode: boolean
   /** How many options the model offers per reply in choice mode. */
   choiceCount: number
+  /** Reading font size (13, 14, 15, 16). */
+  readingFontSize: '13' | '14' | '15' | '16'
+  /** Reading font family ('default' | 'serif' | 'sans'). */
+  readingFontFamily: 'default' | 'serif' | 'sans'
+  /** Subtle contrast emphasis on 『』 dialogue. */
+  dialogueHighlight: boolean
 }
 
 type SettingsKey = keyof RoleplaySettings
@@ -53,6 +59,9 @@ const fields = {
   cardStore: z.union(['workspace', 'global']).default('workspace'),
   choiceMode: z.boolean().default(false),
   choiceCount: z.number().min(2).max(8).default(4),
+  readingFontSize: z.union(['13', '14', '15', '16']).default('14'),
+  readingFontFamily: z.union(['default', 'serif', 'sans']).default('default'),
+  dialogueHighlight: z.boolean().default(true),
 } satisfies Record<SettingsKey, z>
 
 /** Every settings field name, in declaration order. */

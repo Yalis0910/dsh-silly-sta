@@ -21,6 +21,7 @@ export interface CardSummary {
   avatarUrl: string | null
   bookEntries: number
   userPersonaId?: string
+  lorebookIds?: string[]
   scope: StoreScope
 }
 
@@ -32,6 +33,7 @@ export interface SessionState {
     choiceMode?: boolean
     pendingInstruction?: string
     authorNote?: string
+    storyMemory?: string
     greetingIndex?: number
     workspacePath?: string
   } | null
@@ -43,6 +45,7 @@ export interface SessionState {
     avatarUrl: string | null
     regexScripts: RegexScriptValue[]
     userPersonaId?: string
+    lorebookIds?: string[]
     updatedAt: number
   } | null
   choiceModeDefault: boolean
@@ -94,6 +97,7 @@ export interface CharacterCardDetail {
     book: LoreEntryValue[]
     regexScripts: RegexScriptValue[]
     userPersonaId?: string
+    lorebookIds?: string[]
     avatar?: string
     favorite: boolean
     createdAt: number
@@ -102,6 +106,29 @@ export interface CharacterCardDetail {
   avatarUrl: string | null
 }
 
+
+
+export interface LorebookSummary {
+  id: string
+  name: string
+  description: string
+  entriesCount: number
+  createdAt: number
+  updatedAt: number
+  scope: StoreScope
+}
+
+export interface LorebookDetail {
+  book: {
+    id: string
+    name: string
+    description: string
+    entries: LoreEntryValue[]
+    createdAt: number
+    updatedAt: number
+  }
+  scope: StoreScope
+}
 
 export interface RoleplaySettingsValue {
   userName: string
@@ -113,6 +140,9 @@ export interface RoleplaySettingsValue {
   cardStore: StoreScope
   choiceMode: boolean
   choiceCount: number
+  readingFontSize?: '13' | '14' | '15' | '16'
+  readingFontFamily?: 'default' | 'serif' | 'sans'
+  dialogueHighlight?: boolean
 }
 
 const BASE = '/x-roleplay'
@@ -171,6 +201,29 @@ export const api = {
       headers: { 'Content-Type': 'application/octet-stream' },
       body: bytes,
     }),
+  lorebooks: (ws?: string) => request<{ lorebooks: LorebookSummary[] }>(withWs('/lorebooks', ws)),
+  getLorebook: (id: string, ws?: string) => request<LorebookDetail>(withWs(`/lorebooks/${id}`, ws)),
+  saveLorebook: (raw: object, ws?: string) =>
+    request<{ book: unknown }>(withWs('/lorebooks', ws), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(raw),
+    }),
+  updateLorebook: (id: string, patch: object, ws?: string) =>
+    request<{ book: unknown }>(withWs(`/lorebooks/${id}`, ws), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    }),
+  deleteLorebook: (id: string, ws?: string) =>
+    request<{ deleted: boolean }>(withWs(`/lorebooks/${id}`, ws), { method: 'DELETE' }),
+  importLorebook: (bytes: ArrayBuffer, ws?: string) =>
+    request<{ book: unknown; scope: StoreScope }>(withWs('/lorebooks/import', ws), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: bytes,
+    }),
+  exportLorebookUrl: (id: string, ws?: string) => `${BASE}${withWs(`/lorebooks/${id}/export.json`, ws)}`,
   session: (sessionId: string) => request<SessionState>(`/session/${encodeURIComponent(sessionId)}`),
   updateSession: (sessionId: string, patch: {
     mode?: string
@@ -181,6 +234,8 @@ export const api = {
     pendingInstruction?: string | null
     /** Persistent scene direction or author's note; null clears it. */
     authorNote?: string | null
+    /** Persistent story milestones, promises and facts; null clears it. */
+    storyMemory?: string | null
     /** Currently selected greeting index for the session. */
     greetingIndex?: number
     /** The session's workspace path (recorded by the dock); null forgets it. */

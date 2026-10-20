@@ -26,6 +26,9 @@ An immersive role-play and character authoring plugin for DeepSeek Harness (DSH)
 - **Yohaku Aesthetics & Natural Text Flow**: Inspired by Yohaku's minimalist design philosophy. Eliminates bulky speech bubbles in favor of a clean, borderless, continuous prose stream with responsive layouts optimized for both desktop and mobile devices.
 - **Intelligent Prose Coloring**: Distinguishes spoken dialogue, narration, thoughts, and actions. Dynamically executes character-specific regex scripts with subtle, elegant color highlights.
 - **Alternate Greetings Switcher**: Effortlessly cycle through multiple opening greetings using inline pagination controls without needing to re-create the session.
+- **Swipe Branching & Candidate Comparison**: Assistant response toolbar features `‹ 1 / N ›` candidate switcher and branch re-rolling, preserving all previous candidate replies for instant comparison.
+- **Story Memory & Recap**: Top-dock persistent story memory drawer with quick chips (Promise, Secret, Item, Status) continuously injected into system context with high priority to prevent long-term plot forgetting.
+- **Typography & Reading Customization**: Adjustable font size (13~16px), font family switching (Novel Serif / Modern Sans-Serif), and 『』 dialogue contrast enhancement.
 - **Inline Temporary Instruction & Presets**: An unobtrusive drawer with quick preset chips (Advance to Next Day, Inner Monologue, Sensory Details, Plot Twist, Emotional Clash) to steer the narrative, automatically cleared after delivery.
 - **Multi-Persona Profiles (User Personas)**: Manage multiple player profiles (e.g., Commander, Master, Adventurer) with seamless switching from the dock header or automatic card binding.
 - **Scene Setting (Author's Note)**: Configurable story guidance and tone setting injected deeply into context for long-term narrative consistency.
@@ -35,6 +38,7 @@ An immersive role-play and character authoring plugin for DeepSeek Harness (DSH)
 - **One-Line Inspiration**: Transform a single prompt into a fully formed character card featuring backstory, personality, opening greeting, scenario, lorebook entries, avatar, and optional matching player persona.
 - **One-Click Card Cloning**: Easily clone existing character cards to branch out new storylines and divergent personalities.
 - **Full-Featured Card Editor**: Edit card details, tags, bound player personas, system prompts, alternate greetings, and regex scripts, alongside rich Lorebook management.
+- **Standalone Lorebooks Decoupling**: Independently create, manage, import, and export SillyTavern / World Info standard JSON worldbooks, and multi-mount them across multiple character cards.
 - **Export Anywhere**: Export cards directly as standard SillyTavern-compatible PNGs (with embedded metadata) or JSON files.
 
 ### 🖼️ Local Gallery & Illustration Viewer

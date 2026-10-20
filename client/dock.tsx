@@ -251,7 +251,7 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
   const [cards, setCards] = useState<CardSummary[] | null>(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
-  const [activeTray, setActiveTray] = useState<'none' | 'instruction' | 'note'>('none')
+  const [activeTray, setActiveTray] = useState<'none' | 'instruction' | 'note' | 'memory'>('none')
 
   /** This session's workspace path — recorded on the binding for host-side stores.
       Subscribed: the workspaces feed loads async and this must follow it in. */
@@ -277,6 +277,15 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
     if (state) reload()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [running])
+
+  useEffect(() => {
+    api.settings().then(res => {
+      const s = res.value
+      document.body.dataset.rpFontSize = s.readingFontSize ?? '14'
+      document.body.dataset.rpFont = s.readingFontFamily ?? 'default'
+      document.body.dataset.rpHighlight = s.dialogueHighlight !== false ? 'true' : 'false'
+    }).catch(() => {})
+  }, [])
 
   const bound = state?.binding?.characterId ? state.card : null
   // Avatar files are overwritten in place; updatedAt busts the browser cache.
@@ -433,6 +442,18 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
     </select>
   ) : null
 
+  const hasStoryMemory = (state.binding?.storyMemory ?? '').trim() !== ''
+  const storyMemoryButton = !isForge ? (
+    <button
+      type="button"
+      className={`rp-btn${activeTray === 'memory' ? ' rp-active' : ''}${hasStoryMemory ? ' rp-on' : ''}`}
+      title={t('rp.dock.memory.title')}
+      onClick={() => setActiveTray(prev => (prev === 'memory' ? 'none' : 'memory'))}
+    >
+      {t('rp.dock.memory')}{hasStoryMemory ? ' ●' : ''}
+    </button>
+  ) : null
+
   const hasAuthorNote = (state.binding?.authorNote ?? '').trim() !== ''
   const authorNoteButton = !isForge ? (
     <button
@@ -483,11 +504,20 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
         <span className="rp-muted">{t('rp.dock.answering')}</span>
         <span className="rp-spacer" />
         {toggles}
+        {storyMemoryButton}
         {authorNoteButton}
         {stagedInstructionButton}
         {continueButton}
         {switchButton}
       </div>
+      {activeTray === 'memory' ? (
+        <MemoryTray
+          sessionId={sessionId}
+          memory={state.binding?.storyMemory ?? ''}
+          reload={reload}
+          onClose={() => setActiveTray('none')}
+        />
+      ) : null}
       {activeTray === 'instruction' ? (
         <InstructionTray
           sessionId={sessionId}
@@ -520,11 +550,20 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
           {isForge ? <span className="rp-muted">{t('rp.dock.forge.editing')}</span> : null}
           <span className="rp-spacer" />
           {toggles}
+          {storyMemoryButton}
           {authorNoteButton}
           {stagedInstructionButton}
           {continueButton}
           {switchButton}
         </div>
+        {activeTray === 'memory' ? (
+        <MemoryTray
+          sessionId={sessionId}
+          memory={state.binding?.storyMemory ?? ''}
+          reload={reload}
+          onClose={() => setActiveTray('none')}
+        />
+      ) : null}
         {activeTray === 'instruction' ? (
           <InstructionTray
             sessionId={sessionId}
@@ -719,4 +758,92 @@ function AuthorNoteTray({ sessionId, note, reload, onClose }: {
   )
 }
 
+const MEMORY_CHIPS = [
+  { labelKey: 'rp.dock.memory.chip.promise', prefix: '[约定] ' },
+  { labelKey: 'rp.dock.memory.chip.secret', prefix: '[秘密] ' },
+  { labelKey: 'rp.dock.memory.chip.item', prefix: '[信物] ' },
+  { labelKey: 'rp.dock.memory.chip.status', prefix: '[状态] ' },
+] as const
+
+function MemoryTray({ sessionId, memory, reload, onClose }: {
+  sessionId: string
+  memory: string
+  reload: () => void
+  onClose: () => void
+}): React.ReactNode {
+  const t = useT()
+  const [text, setText] = useState(memory)
+  const ref = useRef<HTMLTextAreaElement | null>(null)
+  const saveTimer = useRef<number | undefined>(undefined)
+
+  useEffect(() => {
+    ref.current?.focus()
+  }, [])
+
+  useEffect(() => {
+    setText(memory)
+  }, [memory])
+
+  const save = useCallback((value: string) => {
+    setText(value)
+    if (saveTimer.current !== undefined) window.clearTimeout(saveTimer.current)
+    saveTimer.current = window.setTimeout(() => {
+      void api.updateSession(sessionId, { storyMemory: value.trim() === '' ? null : value })
+        .then(reload)
+        .catch(() => {})
+    }, 350)
+  }, [sessionId, reload])
+
+  const clear = useCallback(() => {
+    save('')
+    ref.current?.focus()
+  }, [save])
+
+  const appendChip = useCallback((prefix: string) => {
+    const current = text.trim()
+    const next = current ? `${current}\n${prefix}` : prefix
+    save(next)
+    ref.current?.focus()
+  }, [text, save])
+
+  return (
+    <div className="rp-tray-panel">
+      <div className="rp-tray-header">
+        <span className="rp-tray-title">{t('rp.dock.memory')}</span>
+        <div className="rp-tray-actions">
+          {text.trim() ? (
+            <button type="button" className="rp-btn-subtle" onClick={clear}>
+              {t('rp.dock.instruction.clear')}
+            </button>
+          ) : null}
+          <button type="button" className="rp-popover-close" onClick={onClose} title="关闭">×</button>
+        </div>
+      </div>
+      <div className="rp-chip-row">
+        {MEMORY_CHIPS.map(chip => (
+          <button
+            key={chip.labelKey}
+            type="button"
+            className="rp-chip"
+            onClick={() => appendChip(chip.prefix)}
+          >
+            + {t(chip.labelKey)}
+          </button>
+        ))}
+      </div>
+      <textarea
+        ref={ref}
+        className="rp-textarea"
+        rows={4}
+        placeholder={t('rp.dock.memory.hint')}
+        value={text}
+        onChange={event => save(event.target.value)}
+        onKeyDown={event => {
+          if (event.key === 'Escape') onClose()
+        }}
+      />
+      <span className="rp-note">{t('rp.dock.memory.note')}</span>
+    </div>
+  )
+}
 
