@@ -286,10 +286,12 @@ function usePendingHolder(active: boolean): HTMLElement | null {
 
 function InviteCardTray({
   availableCards,
+  joinedNames = [],
   onPick,
   onClose,
 }: {
   availableCards: CardSummary[]
+  joinedNames?: string[]
   onPick: (cardId: string) => void
   onClose: () => void
 }): React.ReactNode {
@@ -302,9 +304,9 @@ function InviteCardTray({
   }, [availableCards, filter])
 
   return (
-    <div className="rp-tray-panel" style={{ maxHeight: 380, overflowY: 'auto' }}>
+    <div className="rp-tray-panel" style={{ maxHeight: 400, overflowY: 'auto' }}>
       <div className="rp-tray-header">
-        <span className="rp-tray-title">👥 {t('rp.dock.group.inviteCard')}</span>
+        <span className="rp-tray-title">👥 {t('rp.dock.group.inviteCard')} ({availableCards.length})</span>
         <div className="rp-tray-actions">
           {availableCards.length > 4 ? (
             <input
@@ -320,9 +322,19 @@ function InviteCardTray({
         </div>
       </div>
       {availableCards.length === 0 ? (
-        <span className="rp-muted" style={{ padding: '16px 0', textAlign: 'center', fontSize: 12 }}>
-          暂无更多可邀请的角色，请先在角色卡管理中导入或创建更多角色卡。
-        </span>
+        <div style={{ padding: '16px 8px', textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--yh-neutral-9)' }}>
+            🎉 {t('rp.dock.group.allCardsJoined')}
+          </span>
+          {joinedNames.length > 0 ? (
+            <span className="rp-muted" style={{ fontSize: 12 }}>
+              当前房间成员（{joinedNames.length}人）：{joinedNames.join('、')}
+            </span>
+          ) : null}
+          <span className="rp-muted" style={{ fontSize: 12 }}>
+            酒馆中已无其他可选角色卡。如需同台演出更多角色，请先在酒馆「角色卡」管理中导入或创建新角色。
+          </span>
+        </div>
       ) : (
         <div className="rp-cardgrid" style={{ maxHeight: 260, overflowY: 'auto', padding: '4px 0' }}>
           {filtered.map(card => (
@@ -453,7 +465,33 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
 
 
   const isGroup = (state?.binding?.groupCardIds?.length ?? 0) >= 2
-  const groupCards = state?.groupCards ?? []
+
+  const groupCards = useMemo(() => {
+    if (state?.groupCards && state.groupCards.length > 0) return state.groupCards
+    const ids = state?.binding?.groupCardIds && state.binding.groupCardIds.length > 0
+      ? state.binding.groupCardIds
+      : (state?.binding?.characterId ? [state.binding.characterId] : [])
+    return ids.map(id => {
+      const match = cards?.find(c => c.id === id)
+      if (match) {
+        return {
+          id: match.id,
+          name: match.name,
+          avatarUrl: match.avatarUrl ?? null,
+          updatedAt: match.updatedAt,
+        }
+      }
+      if (state?.card?.id === id) {
+        return {
+          id: state.card.id,
+          name: state.card.name,
+          avatarUrl: state.card.avatarUrl ?? null,
+          updatedAt: state.card.updatedAt,
+        }
+      }
+      return { id, name: id, avatarUrl: null, updatedAt: 0 }
+    })
+  }, [state?.groupCards, state?.binding?.groupCardIds, state?.binding?.characterId, state?.card, cards])
 
   const activeSpeakerId = state?.binding?.activeSpeakerId ?? state?.binding?.characterId
   const activeSpeaker = isGroup ? groupCards.find(c => c.id === activeSpeakerId) ?? groupCards[0] : null
@@ -488,6 +526,18 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
       groupCardIds: current,
       characterId: current[0] ?? null,
       activeSpeakerId: nextSpeaker,
+    })
+    reload()
+  }, [sessionId, state, reload])
+
+  const exitGroup = useCallback(async () => {
+    if (!state?.binding) return
+    const hostId = state.binding.characterId || state.binding.groupCardIds?.[0] || null
+    await api.updateSession(sessionId, {
+      groupCardIds: hostId ? [hostId] : [],
+      characterId: hostId,
+      activeSpeakerId: null,
+      speakerMode: 'auto',
     })
     reload()
   }, [sessionId, state, reload])
@@ -683,6 +733,27 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
 
   const questionBar = holder ? createPortal(
     <div className="rp-dock">
+      {isGroup && !isForge ? (
+        <div className="rp-dock-group-row">
+          <div className="rp-group-roster">
+            <span className="rp-muted" style={{ fontSize: 12, marginRight: 2 }}>{t('rp.dock.group.title')}:</span>
+            {groupCards.map(member => {
+              const isSpeaker = member.id === (activeSpeakerId ?? groupCards[0]?.id)
+              return (
+                <div
+                  key={member.id}
+                  className={`rp-group-pill${isSpeaker ? ' rp-speaker-active' : ''}`}
+                  title={isSpeaker ? t('rp.dock.group.activeSpeaker') : t('rp.dock.group.clickToSpeak')}
+                >
+                  <Avatar url={member.avatarUrl ? stampedUrl(member.avatarUrl, member.updatedAt) : null} name={member.name} />
+                  <span>{member.name}</span>
+                  {isSpeaker ? <span className="rp-group-crown">👑</span> : null}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      ) : null}
       <div className="rp-dock-row rp-dock-row-oneline">
         <Avatar url={boundAvatar} name={bound.name} />
         <Tooltip label={bound.name} side="bottom">
@@ -805,6 +876,15 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
                   🗣️ 对{activeSpeaker.name}说
                 </button>
               ) : null}
+
+              <button
+                type="button"
+                className="rp-btn-subtle rp-btn-exit-group"
+                onClick={exitGroup}
+                title={t('rp.dock.group.exitTitle')}
+              >
+                🚪 {t('rp.dock.group.exit')}
+              </button>
             </div>
           </div>
         ) : null}
@@ -840,6 +920,7 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
         {inviteOpen ? (
           <InviteCardTray
             availableCards={availableCards}
+            joinedNames={groupCards.map(c => c.name)}
             onPick={cardId => {
               void addMember(cardId)
               setInviteOpen(false)

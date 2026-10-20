@@ -2216,6 +2216,18 @@ body[data-rp-highlight="true"] ::highlight(rp-say) {
   padding: 3px 8px;
 }
 
+.rp-btn-exit-group {
+  font-size: 11px;
+  padding: 3px 8px;
+  color: var(--yh-neutral-7);
+  transition: all 0.15s ease;
+}
+.rp-btn-exit-group:hover {
+  color: var(--yh-error);
+  border-color: var(--yh-error);
+  background: var(--yh-error-soft, rgba(239, 68, 68, 0.08));
+}
+
 /* ── Inspector Tray ─────────────────────────────────────────────────── */
 .rp-inspector-panel {
   max-height: 520px;
