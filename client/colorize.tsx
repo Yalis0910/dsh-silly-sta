@@ -38,6 +38,7 @@ export function replaceMacros(
   userName: string,
   context?: MacroContext,
 ): string {
+  if (!text) return ''
   let result = text
     .replaceAll(/\{\{\s*char\s*\}\}/gi, charName)
     .replaceAll(/\{\{\s*user\s*\}\}/gi, userName)

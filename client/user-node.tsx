@@ -62,7 +62,7 @@ export function RoleplayUserNode(props: UserNodeProps): ReactNode {
   const content = props.node?.data?.content ?? []
   const { text, textOnly } = textOf(content)
   const turnNumber = turnOf(props.node)
-  const prevTurnEnd = turnNumber !== undefined ? flow?.turnEnds.get(turnNumber - 1) : undefined
+  const prevTurnEnd = turnNumber !== undefined ? (flow?.turnEnds.get(turnNumber - 1) ?? (turnNumber === 1 ? 0 : undefined)) : undefined
 
   if (preset !== 'roleplay' || !textOnly) {
     const native = nativeKeyedComponent('conversation.chat.node', 'user', RoleplayUserNode)

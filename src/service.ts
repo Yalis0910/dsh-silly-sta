@@ -639,9 +639,20 @@ export class RoleplayService extends Service {
     const { scope, root } = located
     if (scope === 'workspace' && root) {
       await rm(join(root, 'lorebooks', `${id}.json`), { force: true })
-      return true
+    } else {
+      await this.domain.table('lorebooks').delete(id)
     }
-    return this.domain.table('lorebooks').delete(id)
+    // Clean up any cards referencing this deleted lorebook
+    try {
+      const cards = this.listCards(wsPath)
+      for (const c of cards) {
+        if (c.lorebookIds && c.lorebookIds.includes(id)) {
+          const next = { ...c, lorebookIds: c.lorebookIds.filter(lbId => lbId !== id) }
+          await this.saveCard(next, { wsPath })
+        }
+      }
+    } catch {}
+    return true
   }
 
   async importLorebook(bytes: Buffer, wsPath?: string): Promise<StandaloneLorebook> {

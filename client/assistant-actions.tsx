@@ -75,7 +75,7 @@ function deriveContext(flow: ChatFlow, messageId: string): {
       userText = content.filter(block => block.type === 'text').map(block => block.text ?? '').join('')
     }
   }
-  return { turn, userText, prevTurnEnd: flow.turnEnds.get(turn - 1) }
+  return { turn, userText, prevTurnEnd: flow.turnEnds.get(turn - 1) ?? (turn === 1 ? 0 : undefined) }
 }
 
 export function RoleplayAssistantActions(props: ActionProps): ReactNode {
@@ -124,16 +124,15 @@ export function RoleplayAssistantActions(props: ActionProps): ReactNode {
     return () => { active = false }
   }, [props.sessionId, context?.turn, swipeKey])
 
-  const persistSwipe = useCallback((nextState: SwipeState) => {
+  const persistSwipe = useCallback(async (nextState: SwipeState): Promise<void> => {
     if (!props.sessionId || !context?.turn) return
     const turnKey = String(context.turn)
-    api.session(props.sessionId)
-      .then(st => {
-        const currentSwipes = st.binding?.swipes ? { ...st.binding.swipes } : {}
-        currentSwipes[turnKey] = nextState
-        return api.updateSession(props.sessionId as string, { swipes: currentSwipes })
-      })
-      .catch(() => {})
+    try {
+      const st = await api.session(props.sessionId)
+      const currentSwipes = st.binding?.swipes ? { ...st.binding.swipes } : {}
+      currentSwipes[turnKey] = nextState
+      await api.updateSession(props.sessionId as string, { swipes: currentSwipes })
+    } catch {}
   }, [props.sessionId, context?.turn])
 
   // Capture current prose text once generation completes
@@ -149,7 +148,7 @@ export function RoleplayAssistantActions(props: ActionProps): ReactNode {
           if (idx !== prev.index) {
             const next = { ...prev, index: idx }
             saveSwipe(swipeKey, next)
-            persistSwipe(next)
+            void persistSwipe(next)
             return next
           }
           return prev
@@ -157,7 +156,7 @@ export function RoleplayAssistantActions(props: ActionProps): ReactNode {
         const nextVariants = [...prev.variants, currentHtml]
         const next = { index: nextVariants.length - 1, variants: nextVariants }
         saveSwipe(swipeKey, next)
-        persistSwipe(next)
+        void persistSwipe(next)
         return next
       })
     }, 100)
@@ -174,21 +173,26 @@ export function RoleplayAssistantActions(props: ActionProps): ReactNode {
     const next = { ...swipe, index: targetIndex }
     setSwipe(next)
     saveSwipe(swipeKey, next)
-    persistSwipe(next)
+    void persistSwipe(next)
   }, [swipe, swipeKey, persistSwipe])
 
-  const handleReroll = useCallback(() => {
+  const handleReroll = useCallback(async () => {
     if (!context || context.prevTurnEnd === undefined || context.userText.trim() === '' || running || busy !== false) return
     const proseEl = findProseElement(btnRef.current)
     const currentHtml = proseEl?.innerHTML
     if (currentHtml && swipeKey) {
+      let stateToPersist: SwipeState | undefined
       setSwipe(prev => {
         const nextVariants = prev.variants.includes(currentHtml) ? prev.variants : [...prev.variants, currentHtml]
-        const nextState = { index: nextVariants.length, variants: nextVariants }
+        const activeIdx = nextVariants.indexOf(currentHtml)
+        const nextState = { index: activeIdx >= 0 ? activeIdx : Math.max(0, nextVariants.length - 1), variants: nextVariants }
         saveSwipe(swipeKey, nextState)
-        persistSwipe(nextState)
+        stateToPersist = nextState
         return nextState
       })
+      if (stateToPersist) {
+        await persistSwipe(stateToPersist).catch(() => {})
+      }
     }
     setBusy('reply')
     rewindAndResend(props.sessionId as string, context.prevTurnEnd as number, context.userText)

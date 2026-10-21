@@ -307,7 +307,7 @@ export function apply(ctx: Context, config: Config): void {
       if (!memory) return ''
       const card = binding?.characterId ? svc.getCard(binding.characterId, wsOf(binding)) : undefined
       const identity = resolveUserIdentity(svc.settings.get(), binding, card)
-      return `[剧情核心备忘录]\n以下是此前剧情确立的核心事实、重大承诺与关键现状，必须严格遵守，保持情节前后连贯：\n${applyMacros(memory, card?.name ?? '', identity.userName)}`
+      return escapeBraces(`[剧情核心备忘录]\n以下是此前剧情确立的核心事实、重大承诺与关键现状，必须严格遵守，保持情节前后连贯：\n${applyMacros(memory, card?.name ?? '', identity.userName)}`)
     },
   })
   ctx.systemPrompt.context({
@@ -319,7 +319,9 @@ export function apply(ctx: Context, config: Config): void {
       const binding = agent ? svc.getBinding(String(agent.id)) : undefined
       const note = binding?.authorNote?.trim()
       if (!note) return ''
-      return `[常驻场景指示与剧情备忘]\n${note}`
+      const card = binding?.characterId ? svc.getCard(binding.characterId, wsOf(binding)) : undefined
+      const identity = resolveUserIdentity(svc.settings.get(), binding, card)
+      return escapeBraces(`[常驻场景指示与剧情备忘]\n${applyMacros(note, card?.name ?? '', identity.userName)}`)
     },
   })
   // Last of the contexts: the interchange format puts the card's
@@ -403,6 +405,7 @@ export function apply(ctx: Context, config: Config): void {
 
     // ── Swipe active variant context synchronization ──
     if (binding?.swipes && Object.keys(binding.swipes).length > 0) {
+      const lastAssistantIndexByTurn = new Map<number, number>()
       let turnCounter = 0
       for (let i = 0; i < messages.length; i++) {
         const msg = messages[i]
@@ -410,19 +413,24 @@ export function apply(ctx: Context, config: Config): void {
         const role = (msg as any)?.role ?? (source?.kind === 'user' ? 'user' : source?.kind === 'assistant' ? 'assistant' : undefined)
         if (role === 'user') {
           turnCounter++
-        } else if (role === 'assistant') {
-          const turnSwipe = binding.swipes[String(turnCounter)]
-          if (turnSwipe && turnSwipe.variants && turnSwipe.variants.length > 0) {
-            const activeVariant = turnSwipe.variants[turnSwipe.index] ?? turnSwipe.variants[0]
-            if (activeVariant) {
-              const cleanText = htmlToText(activeVariant)
-              if (cleanText && msg) {
-                (messages as any[])[i] = {
-                  ...msg,
-                  content: [{ type: 'text', text: cleanText }],
-                }
-                modified = true
+        } else if (role === 'assistant' && turnCounter > 0) {
+          lastAssistantIndexByTurn.set(turnCounter, i)
+        }
+      }
+
+      for (const [turnNum, msgIdx] of lastAssistantIndexByTurn.entries()) {
+        const turnSwipe = binding.swipes[String(turnNum)]
+        if (turnSwipe && turnSwipe.variants && turnSwipe.variants.length > 0) {
+          const activeVariant = turnSwipe.variants[turnSwipe.index] ?? turnSwipe.variants[0]
+          if (activeVariant) {
+            const cleanText = htmlToText(activeVariant)
+            const targetMsg = messages[msgIdx]
+            if (cleanText && targetMsg) {
+              (messages as any[])[msgIdx] = {
+                ...targetMsg,
+                content: [{ type: 'text', text: cleanText }],
               }
+              modified = true
             }
           }
         }
