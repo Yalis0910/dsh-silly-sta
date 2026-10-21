@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, type PromptInspectionReport } from './api.ts'
 import { useT } from './i18n.ts'
+import { useTrayDismiss } from './compat.ts'
 
 interface InspectorTrayProps {
   sessionId: string
@@ -9,6 +10,8 @@ interface InspectorTrayProps {
 }
 
 export function InspectorTray({ sessionId, wsPath, onClose }: InspectorTrayProps): React.ReactNode {
+  const panelRef = useRef<HTMLDivElement | null>(null)
+  useTrayDismiss(panelRef, onClose)
   const t = useT()
   const [report, setReport] = useState<PromptInspectionReport | null>(null)
   const [loading, setLoading] = useState(true)
@@ -56,7 +59,7 @@ export function InspectorTray({ sessionId, wsPath, onClose }: InspectorTrayProps
   }, [report])
 
   return (
-    <div className="rp-tray-panel rp-inspector-panel">
+    <div ref={panelRef} className="rp-tray-panel rp-inspector-panel">
       <div className="rp-tray-header">
         <div className="rp-inspector-title-row">
           <span className="rp-tray-title">{t('rp.inspector.title')}</span>

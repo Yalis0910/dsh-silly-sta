@@ -24,7 +24,35 @@ const SPEAKER_RE = /(?:^|\n)\s*(【[^】\n]+】)/g
 
 /** Replace the card macros with live names (client-side mirror of the host's applyMacros). */
 export function replaceMacros(text: string, charName: string, userName: string): string {
-  return text.replaceAll(/\{\{\s*char\s*\}\}/gi, charName).replaceAll(/\{\{\s*user\s*\}\}/gi, userName)
+  let result = text
+    .replaceAll(/\{\{\s*char\s*\}\}/gi, charName)
+    .replaceAll(/\{\{\s*user\s*\}\}/gi, userName)
+    .replaceAll(/\{\{\s*original\s*\}\}/gi, '')
+    .replaceAll(/\{\{\s*input\s*\}\}/gi, '')
+
+  if (/\{\{\s*(?:time|date|weekday|isodate)\s*\}\}/i.test(result)) {
+    const now = new Date()
+    const timeStr = now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
+    const dateStr = now.toLocaleDateString('zh-CN')
+    const weekdays = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六']
+    const weekdayStr = weekdays[now.getDay()] ?? ''
+    const isoDateStr = now.toISOString().split('T')[0] ?? ''
+
+    result = result
+      .replaceAll(/\{\{\s*time\s*\}\}/gi, timeStr)
+      .replaceAll(/\{\{\s*date\s*\}\}/gi, dateStr)
+      .replaceAll(/\{\{\s*weekday\s*\}\}/gi, weekdayStr)
+      .replaceAll(/\{\{\s*isodate\s*\}\}/gi, isoDateStr)
+  }
+
+  result = result.replaceAll(/\{\{\s*random\s*::\s*([^}]+)\s*\}\}/gi, (_match, choicesStr: string) => {
+    const sep = choicesStr.includes('|') ? '|' : (choicesStr.includes('，') ? '，' : ',')
+    const options = choicesStr.split(sep).map(s => s.trim()).filter(Boolean)
+    if (options.length === 0) return ''
+    return options[Math.floor(Math.random() * options.length)] ?? options[0]!
+  })
+
+  return result
 }
 
 /** One compiled card rule: color whatever the regex (or its group 1) matches. */

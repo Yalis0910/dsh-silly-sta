@@ -4,9 +4,74 @@
  */
 import type { CharacterCard, LoreEntry } from './cards/types.ts'
 
-/** Replace the card macros with the live participant names. */
-export function applyMacros(text: string, charName: string, userName: string): string {
-  return text.replaceAll(/\{\{\s*char\s*\}\}/gi, charName).replaceAll(/\{\{\s*user\s*\}\}/gi, userName)
+export interface MacroContext {
+  charDescription?: string | undefined
+  charPersonality?: string | undefined
+  scenario?: string | undefined
+  userPersona?: string | undefined
+  charVersion?: string | undefined
+  original?: string | undefined
+}
+
+/** Replace the card macros with live participant names and card attributes. */
+export function applyMacros(
+  text: string,
+  charName: string,
+  userName: string,
+  context?: MacroContext,
+): string {
+  let result = text
+    .replaceAll(/\{\{\s*char\s*\}\}/gi, charName)
+    .replaceAll(/\{\{\s*user\s*\}\}/gi, userName)
+
+  if (context?.charDescription !== undefined) {
+    result = result.replaceAll(/\{\{\s*description\s*\}\}/gi, context.charDescription)
+  }
+  if (context?.charPersonality !== undefined) {
+    result = result
+      .replaceAll(/\{\{\s*personality\s*\}\}/gi, context.charPersonality)
+      .replaceAll(/\{\{\s*char_persona\s*\}\}/gi, context.charPersonality)
+      .replaceAll(/\{\{\s*char_personality\s*\}\}/gi, context.charPersonality)
+  }
+  if (context?.scenario !== undefined) {
+    result = result.replaceAll(/\{\{\s*scenario\s*\}\}/gi, context.scenario)
+  }
+  if (context?.userPersona !== undefined) {
+    result = result
+      .replaceAll(/\{\{\s*persona\s*\}\}/gi, context.userPersona)
+      .replaceAll(/\{\{\s*user_persona\s*\}\}/gi, context.userPersona)
+  }
+  if (context?.charVersion !== undefined) {
+    result = result.replaceAll(/\{\{\s*char_version\s*\}\}/gi, context.charVersion)
+  }
+
+  result = result.replaceAll(/\{\{\s*original\s*\}\}/gi, context?.original ?? '')
+
+  if (/\{\{\s*(?:time|date|weekday|isodate)\s*\}\}/i.test(result)) {
+    const now = new Date()
+    const timeStr = now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
+    const dateStr = now.toLocaleDateString('zh-CN')
+    const weekdays = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六']
+    const weekdayStr = weekdays[now.getDay()] ?? ''
+    const isoDateStr = now.toISOString().split('T')[0] ?? ''
+
+    result = result
+      .replaceAll(/\{\{\s*time\s*\}\}/gi, timeStr)
+      .replaceAll(/\{\{\s*date\s*\}\}/gi, dateStr)
+      .replaceAll(/\{\{\s*weekday\s*\}\}/gi, weekdayStr)
+      .replaceAll(/\{\{\s*isodate\s*\}\}/gi, isoDateStr)
+  }
+
+  result = result.replaceAll(/\{\{\s*random\s*::\s*([^}]+)\s*\}\}/gi, (_match, choicesStr: string) => {
+    const sep = choicesStr.includes('|') ? '|' : (choicesStr.includes('，') ? '，' : ',')
+    const options = choicesStr.split(sep).map(s => s.trim()).filter(Boolean)
+    if (options.length === 0) return ''
+    return options[Math.floor(Math.random() * options.length)] ?? options[0]!
+  })
+
+  result = result.replaceAll(/\{\{\s*input\s*\}\}/gi, '')
+
+  return result
 }
 
 /** Base rules for the role-play mode, independent of the bound character. */
@@ -219,7 +284,15 @@ export function pureCharacterSection(
   userPersona: string,
   greetingIndex?: number,
 ): string {
-  const macros = (text: string) => applyMacros(text, card.name, userName)
+  const cardCtx: MacroContext = {
+    charDescription: card.description,
+    charPersonality: card.personality,
+    scenario: card.scenario,
+    userPersona,
+    charVersion: card.characterVersion,
+    original: '',
+  }
+  const macros = (text: string) => applyMacros(text, card.name, userName, cardCtx)
   const parts: string[] = []
   const definition: string[] = [`[你扮演的角色]`, `名字：${card.name}`]
   const persona = [card.description, card.personality].filter(text => text.trim()).map(macros)
@@ -227,7 +300,7 @@ export function pureCharacterSection(
   if (card.scenario.trim()) definition.push(`当前场景：\n${macros(card.scenario)}`)
   if (card.exampleDialogs.trim()) definition.push(`对话示例（仅参考文风，不是既有剧情）：\n${macros(card.exampleDialogs)}`)
   parts.push(definition.join('\n\n'))
-  if (card.systemPrompt.trim()) parts.push(cardRulesSection(card.systemPrompt, card.name, userName))
+  if (card.systemPrompt.trim()) parts.push(cardRulesSection(card.systemPrompt, card.name, userName, cardCtx))
   if (userPersona.trim()) parts.push(`[用户设定]\n${userName}：${userPersona}`)
   const allGreetings = [card.firstMessage, ...(card.alternateGreetings ?? [])].filter(Boolean)
   const activeGreeting = (greetingIndex !== undefined && greetingIndex >= 0 && allGreetings[greetingIndex])
@@ -272,7 +345,15 @@ export function pureGroupCharacterSection(
 
   if (activeCard) {
     // ── Targeted Turn: Single speaker focused, companions in scene ──
-    const macros = (text: string) => applyMacros(text, activeCard.name, userName)
+    const activeCtx: MacroContext = {
+      charDescription: activeCard.description,
+      charPersonality: activeCard.personality,
+      scenario: activeCard.scenario,
+      userPersona,
+      charVersion: activeCard.characterVersion,
+      original: '',
+    }
+    const macros = (text: string) => applyMacros(text, activeCard.name, userName, activeCtx)
     const definition: string[] = ['[你当前扮演的主视角角色]', `名字：${activeCard.name}`]
     const persona = [activeCard.description, activeCard.personality].filter(t => t.trim()).map(macros)
     if (persona.length > 0) definition.push(`设定：\n${persona.join('\n\n')}`)
@@ -288,7 +369,7 @@ export function pureGroupCharacterSection(
       }).join('\n')
       parts.push(`[当前在场同伴]\n除了你（${activeCard.name}）之外，现场还有以下同伴角色在场：\n${companionList}\n你现在必须以【${activeCard.name}】的身份做出回应。可以与在场同伴互动或对话，但发言和行为必须严格符合${activeCard.name}的人设与视角。`)
     }
-    if (activeCard.systemPrompt.trim()) parts.push(cardRulesSection(activeCard.systemPrompt, activeCard.name, userName))
+    if (activeCard.systemPrompt.trim()) parts.push(cardRulesSection(activeCard.systemPrompt, activeCard.name, userName, activeCtx))
   } else {
     // ── Auto Drama Mode: Multi-character group stage ──
     const memberProfiles = cards.map((c, index) => {
@@ -351,11 +432,11 @@ export function groupCharacterSection(
  * cards routinely demand a numbered menu in the reply body, which would fight
  * the ask_user_question path the session setting owns.
  */
-export function cardRulesSection(systemPrompt: string, charName: string, userName: string): string {
+export function cardRulesSection(systemPrompt: string, charName: string, userName: string, context?: MacroContext): string {
   return [
     '[角色卡附加规则]',
     '以下规则由角色卡自带，与上面的通用规则冲突时以这里为准：',
-    applyMacros(systemPrompt, charName, userName),
+    applyMacros(systemPrompt, charName, userName, context),
     '例外：下一步行动的呈现方式由本会话的设置决定，角色卡中关于选项、菜单或编号列表的要求不改变它。',
   ].join('\n')
 }
@@ -366,9 +447,17 @@ export function cardRulesSection(systemPrompt: string, charName: string, userNam
  * defines for it, and the reason it carries more weight there than the same
  * text would in the system prompt.
  */
-export function cardPostHistoryContext(card: CharacterCard, userName: string): string {
+export function cardPostHistoryContext(card: CharacterCard, userName: string, userPersona?: string): string {
   if (!card.postHistoryInstructions.trim()) return ''
-  return escapeBraces(`[角色卡指示]\n${applyMacros(card.postHistoryInstructions, card.name, userName)}`)
+  const cardCtx: MacroContext = {
+    charDescription: card.description,
+    charPersonality: card.personality,
+    scenario: card.scenario,
+    userPersona,
+    charVersion: card.characterVersion,
+    original: '',
+  }
+  return escapeBraces(`[角色卡指示]\n${applyMacros(card.postHistoryInstructions, card.name, userName, cardCtx)}`)
 }
 
 /**

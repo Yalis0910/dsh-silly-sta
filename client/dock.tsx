@@ -13,7 +13,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { createPortal } from 'react-dom'
 import { api, stampedUrl, type CardSummary, type RegexScriptValue, type SessionState } from './api.ts'
 import { currentWorkspace, openSessionId, subscribeWorkspaces, takeResend, workspaceOfSession } from './runtime.ts'
-import { useAgentPreset, useComposerTakenOver, useSessionBlank, useSessionRunning, type SessionSlotProps } from './compat.ts'
+import { useAgentPreset, useComposerTakenOver, useSessionBlank, useSessionRunning, useTrayDismiss, type SessionSlotProps } from './compat.ts'
 import { colorizeProse, compileCardRules, replaceMacros, startProseHighlighter, type CardColorRule } from './colorize.tsx'
 import { Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import { InspectorTray } from './inspector.tsx'
@@ -383,6 +383,8 @@ function InviteCardTray({
   onPick: (cardId: string) => void
   onClose: () => void
 }): React.ReactNode {
+  const panelRef = useRef<HTMLDivElement | null>(null)
+  useTrayDismiss(panelRef, onClose)
   const t = useT()
   const [filter, setFilter] = useState('')
   const filtered = useMemo(() => {
@@ -392,7 +394,7 @@ function InviteCardTray({
   }, [availableCards, filter])
 
   return (
-    <div className="rp-tray-panel" style={{ maxHeight: 400, overflowY: 'auto' }}>
+    <div ref={panelRef} className="rp-tray-panel" style={{ maxHeight: 400, overflowY: 'auto' }}>
       <div className="rp-tray-header">
         <span className="rp-tray-title">👥 {t('rp.dock.group.inviteCard')} ({availableCards.length})</span>
         <div className="rp-tray-actions">
@@ -848,85 +850,9 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
     </button>
   )
 
-  const questionBar = holder ? createPortal(
-    <div className="rp-dock">
+  const dockBody = (
+    <div className={`rp-dock${holder ? ' rp-dock-teleported' : ''}`}>
       {isGroup && !isForge ? (
-        <div className="rp-dock-group-row">
-          <div className="rp-group-roster">
-            <span className="rp-muted" style={{ fontSize: 12, marginRight: 2 }}>{t('rp.dock.group.title')}:</span>
-            {groupCards.map(member => {
-              const isSpeaker = Boolean(activeSpeakerId && member.id === activeSpeakerId)
-              return (
-                <div
-                  key={member.id}
-                  className={`rp-group-pill${isSpeaker ? ' rp-speaker-active' : ''}`}
-                  title={isSpeaker ? t('rp.dock.group.activeSpeaker') : t('rp.dock.group.clickToSpeak')}
-                >
-                  <Avatar url={member.avatarUrl ? stampedUrl(member.avatarUrl, member.updatedAt) : null} name={member.name} />
-                  <span>{member.name}</span>
-                  {isSpeaker ? <span className="rp-group-crown">👑</span> : null}
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      ) : null}
-      <div className="rp-dock-row rp-dock-row-oneline">
-        <Avatar url={boundAvatar} name={bound.name} />
-        <Tooltip label={bound.name} side="bottom">
-          <span className="rp-name">{bound.name}</span>
-        </Tooltip>
-        {personaSelect}
-        <span className="rp-muted">{t('rp.dock.answering')}</span>
-        <span className="rp-spacer" />
-        {toggles}
-        {storyMemoryButton}
-        {authorNoteButton}
-        {stagedInstructionButton}
-        {inspectorButton}
-        {continueButton}
-        {switchButton}
-      </div>
-      {activeTray === 'memory' ? (
-        <MemoryTray
-          sessionId={sessionId}
-          memory={state.binding?.storyMemory ?? ''}
-          wsPath={wsPath}
-          reload={reload}
-          onClose={() => setActiveTray('none')}
-        />
-      ) : null}
-      {activeTray === 'instruction' ? (
-        <InstructionTray
-          sessionId={sessionId}
-          staged={state.binding?.pendingInstruction ?? ''}
-          reload={reload}
-          onClose={() => setActiveTray('none')}
-        />
-      ) : null}
-      {activeTray === 'note' ? (
-        <AuthorNoteTray
-          sessionId={sessionId}
-          note={state.binding?.authorNote ?? ''}
-          reload={reload}
-          onClose={() => setActiveTray('none')}
-        />
-      ) : null}
-      {activeTray === 'inspector' ? (
-        <InspectorTray
-          sessionId={sessionId}
-          wsPath={wsPath}
-          onClose={() => setActiveTray('none')}
-        />
-      ) : null}
-    </div>,
-    holder,
-  ) : null
-
-  return (
-    <>
-      <div className="rp-dock">
-        {isGroup && !isForge ? (
           <div className="rp-dock-group-row">
             <div className="rp-group-roster">
               <span className="rp-muted" style={{ fontSize: 12, marginRight: 2 }}>{t('rp.dock.group.title')}:</span>
@@ -1099,7 +1025,13 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
           </span>
         ) : null}
       </div>
-      {questionBar}
+  )
+
+  const dockNode = holder ? createPortal(dockBody, holder) : dockBody
+
+  return (
+    <>
+      {dockNode}
       {openingHolder && (bound.firstMessage || (isGroup && state.binding?.customOpening)) ? createPortal(
         <OpeningBubble
           card={bound}
@@ -1133,6 +1065,8 @@ function InstructionTray({ sessionId, staged, reload, onClose }: {
   reload: () => void
   onClose: () => void
 }): React.ReactNode {
+  const panelRef = useRef<HTMLDivElement | null>(null)
+  useTrayDismiss(panelRef, onClose)
   const t = useT()
   const [text, setText] = useState(staged)
   const ref = useRef<HTMLTextAreaElement | null>(null)
@@ -1169,7 +1103,7 @@ function InstructionTray({ sessionId, staged, reload, onClose }: {
   }, [text, stage])
 
   return (
-    <div className="rp-tray-panel">
+    <div ref={panelRef} className="rp-tray-panel">
       <div className="rp-tray-header">
         <span className="rp-tray-title">{t('rp.dock.instruction')}</span>
         <div className="rp-tray-actions">
@@ -1215,6 +1149,8 @@ function AuthorNoteTray({ sessionId, note, reload, onClose }: {
   reload: () => void
   onClose: () => void
 }): React.ReactNode {
+  const panelRef = useRef<HTMLDivElement | null>(null)
+  useTrayDismiss(panelRef, onClose)
   const t = useT()
   const [text, setText] = useState(note)
   const ref = useRef<HTMLTextAreaElement | null>(null)
@@ -1244,7 +1180,7 @@ function AuthorNoteTray({ sessionId, note, reload, onClose }: {
   }, [save])
 
   return (
-    <div className="rp-tray-panel">
+    <div ref={panelRef} className="rp-tray-panel">
       <div className="rp-tray-header">
         <span className="rp-tray-title">{t('rp.dock.an')}</span>
         <div className="rp-tray-actions">
@@ -1285,6 +1221,8 @@ function MemoryTray({ sessionId, memory, wsPath, reload, onClose }: {
   reload: () => void
   onClose: () => void
 }): React.ReactNode {
+  const panelRef = useRef<HTMLDivElement | null>(null)
+  useTrayDismiss(panelRef, onClose)
   const t = useT()
   const [text, setText] = useState(memory)
   const [recapLoading, setRecapLoading] = useState(false)
@@ -1352,7 +1290,7 @@ function MemoryTray({ sessionId, memory, wsPath, reload, onClose }: {
   }, [text, save])
 
   return (
-    <div className="rp-tray-panel">
+    <div ref={panelRef} className="rp-tray-panel">
       <div className="rp-tray-header">
         <span className="rp-tray-title">{t('rp.dock.memory')}</span>
         <div className="rp-tray-actions">

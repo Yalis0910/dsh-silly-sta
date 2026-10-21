@@ -337,7 +337,7 @@ export function apply(ctx: Context, config: Config): void {
         : cards[0]
       if (!activeCard) return ''
       const identity = resolveUserIdentity(svc.settings.get(), binding, activeCard)
-      return cardPostHistoryContext(activeCard, identity.userName)
+      return cardPostHistoryContext(activeCard, identity.userName, identity.userPersona)
     },
   })
 

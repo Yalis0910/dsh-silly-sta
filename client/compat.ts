@@ -258,3 +258,35 @@ export function turnOf(node: ChatNodeLike | undefined): number | undefined {
   const location = node?.location
   return location && (location.kind === 'turn' || location.kind === 'step') ? location.turn?.turn : undefined
 }
+
+/**
+ * Dismiss popover / tray on Escape key or outside click.
+ * Ignores clicks on elements matching .rp-btn (e.g. dock toggle buttons)
+ * so that toggle buttons can handle their own on/off logic.
+ */
+export function useTrayDismiss(ref: { current: HTMLElement | null }, onClose: () => void): void {
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.stopPropagation()
+        onClose()
+      }
+    }
+    const handleMouseDown = (event: MouseEvent) => {
+      const el = ref.current
+      if (!el) return
+      const target = event.target
+      if (target instanceof Node) {
+        if (el.contains(target)) return
+        if (target instanceof Element && target.closest('.rp-btn')) return
+        onClose()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown, true)
+    document.addEventListener('mousedown', handleMouseDown, true)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown, true)
+      document.removeEventListener('mousedown', handleMouseDown, true)
+    }
+  }, [ref, onClose])
+}
