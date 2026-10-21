@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { IconQuestionOutlineRegular, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import { api, formatBytes, stampedUrl, type CardSummary, type GalleryUsage, type LorebookDetail, type LorebookSummary, type LoreEntryValue, type RoleplaySettingsValue, type StoreScope, type UserPersonaValue } from './api.ts'
-import { CardEditor } from './card-editor.tsx'
+import { CardEditor, LORE_POSITIONS } from './card-editor.tsx'
 import { ImageGalleryPage } from './gallery.tsx'
 import { currentWorkspace, subscribeWorkspaces, type WorkspaceInfo } from './runtime.ts'
 import { useT, tf } from './i18n.ts'
@@ -286,7 +286,9 @@ function UserPersonaManager({ personas, onChange }: {
     if (!trimmedName) return
     if (editingId === 'new') {
       const newPersona: UserPersonaValue = {
-        id: crypto.randomUUID(),
+        id: (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
+          ? crypto.randomUUID()
+          : `persona-${Date.now()}-${Math.floor(Math.random() * 1e6)}`,
         name: trimmedName,
         persona: draftPersona.trim(),
       }
@@ -914,6 +916,69 @@ function LorebookManager({ ws }: { ws: WorkspaceInfo | undefined }): ReactNode {
                   }}
                 />
               </Field>
+              <div className="rp-inline">
+                <Field label={t('rp.editor.book.position')}>
+                  <select
+                    value={entry.position}
+                    onChange={e => {
+                      const next = [...editingBook.entries]
+                      next[idx] = { ...entry, position: e.target.value as LoreEntryValue['position'] }
+                      setEditingBook({ ...editingBook, entries: next })
+                    }}
+                  >
+                    {LORE_POSITIONS.map(position => <option key={position} value={position}>{position}</option>)}
+                  </select>
+                </Field>
+                {entry.position === 'at_depth' ? (
+                  <Field label="深度">
+                    <input
+                      type="number"
+                      min={0}
+                      value={entry.depth ?? 4}
+                      onChange={e => {
+                        const next = [...editingBook.entries]
+                        next[idx] = { ...entry, depth: Math.max(0, Number(e.target.value) || 0) }
+                        setEditingBook({ ...editingBook, entries: next })
+                      }}
+                    />
+                  </Field>
+                ) : null}
+                <Field label={t('rp.editor.book.order')}>
+                  <input
+                    type="number"
+                    value={entry.order}
+                    onChange={e => {
+                      const next = [...editingBook.entries]
+                      next[idx] = { ...entry, order: Number(e.target.value) || 0 }
+                      setEditingBook({ ...editingBook, entries: next })
+                    }}
+                  />
+                </Field>
+                <div className="rp-field">
+                  <label>{t('rp.editor.book.constant')}</label>
+                  <input
+                    type="checkbox"
+                    checked={entry.constant}
+                    onChange={e => {
+                      const next = [...editingBook.entries]
+                      next[idx] = { ...entry, constant: e.target.checked }
+                      setEditingBook({ ...editingBook, entries: next })
+                    }}
+                  />
+                </div>
+                <div className="rp-field">
+                  <label>{t('rp.editor.book.regex')}</label>
+                  <input
+                    type="checkbox"
+                    checked={entry.useRegex}
+                    onChange={e => {
+                      const next = [...editingBook.entries]
+                      next[idx] = { ...entry, useRegex: e.target.checked }
+                      setEditingBook({ ...editingBook, entries: next })
+                    }}
+                  />
+                </div>
+              </div>
             </div>
           ))}
 

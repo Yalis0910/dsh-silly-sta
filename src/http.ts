@@ -233,9 +233,10 @@ async function route(req: IncomingMessage, res: ServerResponse, service: Rolepla
   }
 
   // ── session bindings ──
-  const sessionMatch = path.match(/^\/session(?:\/([A-Za-z0-9._-]*))?$/)
+  const sessionMatch = path.match(/^\/session(?:\/([^/]+))?$/)
   if (sessionMatch) {
-    const sessionId = (sessionMatch[1] && sessionMatch[1].trim() !== '') ? sessionMatch[1] : 'new'
+    const rawSessionId = sessionMatch[1]?.trim()
+    const sessionId = (rawSessionId && rawSessionId !== '') ? decodeURIComponent(rawSessionId) : 'new'
     if (method === 'GET') {
       const settings = service.settings.get()
       const binding = service.getBinding(sessionId)
@@ -256,6 +257,10 @@ async function route(req: IncomingMessage, res: ServerResponse, service: Rolepla
           ? {
               id: card.id,
               name: card.name,
+              description: card.description,
+              personality: card.personality,
+              scenario: card.scenario,
+              characterVersion: card.characterVersion,
               firstMessage: card.firstMessage,
               alternateGreetings: card.alternateGreetings,
               avatarUrl: service.avatarUrl(card, cardScope, cardWs) ?? null,
@@ -280,9 +285,9 @@ async function route(req: IncomingMessage, res: ServerResponse, service: Rolepla
     }
   }
 
-  const sessionActionMatch = path.match(/^\/session\/([A-Za-z0-9._-]+)\/(recap|fuse-greetings|inspector)$/)
+  const sessionActionMatch = path.match(/^\/session\/([^/]+)\/(recap|fuse-greetings|inspector)$/)
   if (sessionActionMatch) {
-    const sessionId = sessionActionMatch[1]!
+    const sessionId = decodeURIComponent(sessionActionMatch[1]!)
     const action = sessionActionMatch[2]!
     if (action === 'recap' && method === 'POST') {
       const result = await service.generateRecap(sessionId, ws)

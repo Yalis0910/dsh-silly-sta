@@ -150,16 +150,26 @@ export function cardFromInterchange(raw: unknown): CharacterCard {
 export function cardFromPng(bytes: Buffer): CharacterCard | undefined {
   if (!isPng(bytes)) return undefined
   const texts = readTextChunks(bytes)
-  const payload = texts.get('chara') ?? texts.get('ccv3')
+  const payload = texts.get('ccv3') ?? texts.get('chara')
   if (!payload) return undefined
   let json: unknown
-  try {
-    json = JSON.parse(Buffer.from(payload, 'base64').toString('utf8'))
-  } catch {
+  const trimmed = payload.trim()
+  if (trimmed.startsWith('{')) {
     try {
-      json = JSON.parse(payload)
+      json = JSON.parse(trimmed)
     } catch {
-      return undefined
+      // fallback to base64
+    }
+  }
+  if (!json) {
+    try {
+      json = JSON.parse(Buffer.from(payload, 'base64').toString('utf8'))
+    } catch {
+      try {
+        json = JSON.parse(payload)
+      } catch {
+        return undefined
+      }
     }
   }
   return cardFromInterchange(json)

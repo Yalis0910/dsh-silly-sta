@@ -5,6 +5,7 @@
  * per-session character context, and the model-facing tools. The file/web
  * tool grants are enforced from the host plane (src/tool-grants.ts).
  */
+import { randomUUID } from 'node:crypto'
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { defineTool } from '@deepseek-ai/dsh-tools'
@@ -363,14 +364,18 @@ export function apply(ctx: Context, config: Config): void {
 
     const original = decision.messages[index]!
     let userText = ''
-    for (const block of original.content) {
-      if (block && typeof block === 'object' && (block as any).type === 'text') {
-        userText += (block as any).text ?? ''
+    if (typeof (original as any).content === 'string') {
+      userText = (original as any).content
+    } else if (Array.isArray(original.content)) {
+      for (const block of original.content) {
+        if (block && typeof block === 'object' && (block as any).type === 'text') {
+          userText += (block as any).text ?? ''
+        }
       }
     }
 
-    // ── Group Chat: Speaker rotation & targeting ──
-    if (binding && binding.groupCardIds && binding.groupCardIds.length >= 2) {
+    // ── Group Chat: Speaker rotation & targeting (only on the turn's opening step) ──
+    if (payload.step === 0 && binding && binding.groupCardIds && binding.groupCardIds.length >= 2) {
       const match = userText.match(/【对\s*([^】]+?)\s*(?:说|讲|问)?】/)
       if (match) {
         const targetName = match[1]!.trim().toLowerCase()
@@ -428,15 +433,19 @@ export function apply(ctx: Context, config: Config): void {
     const instruction = binding?.pendingInstruction?.trim()
     if (instruction) {
       const targetMsg = messages[index]!
-      const content = [...targetMsg.content]
-      const last = content[content.length - 1]
       const suffix = `\n\n[系统指令: ${instruction}]`
-      if (last && (last as { type?: string }).type === 'text') {
-        content[content.length - 1] = { ...(last as object), text: `${(last as { text?: string }).text ?? ''}${suffix}` } as typeof last
+      if (typeof (targetMsg as any).content === 'string') {
+        messages[index] = { ...targetMsg, content: [{ type: 'text', text: (targetMsg as any).content + suffix }] } as typeof targetMsg
       } else {
-        content.push({ type: 'text', text: suffix.trimStart() } as (typeof content)[number])
+        const content = Array.isArray(targetMsg.content) ? [...targetMsg.content] : []
+        const last = content[content.length - 1]
+        if (last && (last as { type?: string }).type === 'text') {
+          content[content.length - 1] = { ...(last as object), text: `${(last as { text?: string }).text ?? ''}${suffix}` } as typeof last
+        } else {
+          content.push({ type: 'text', text: suffix.trimStart() } as (typeof content)[number])
+        }
+        messages[index] = { ...targetMsg, content } as typeof targetMsg
       }
-      messages[index] = { ...targetMsg, content } as typeof targetMsg
       try {
         await svc.updateBinding(sessionId, { pendingInstruction: null })
       } catch {}
@@ -602,7 +611,7 @@ function registerForgeTools(ctx: Context): void {
           boundPersonaId = found.id
           boundPersonaName = found.name
         } else {
-          const newId = crypto.randomUUID()
+          const newId = randomUUID()
           currentPersonas.push({ id: newId, name: pName, persona: pDesc })
           await svc.settings.update({ userPersonas: currentPersonas })
           boundPersonaId = newId

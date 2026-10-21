@@ -133,6 +133,7 @@ function OpeningBubble({
   onSwitchGreeting,
   canSwitch = true,
   userName: propUserName,
+  userPersona,
   onFuseOpening,
   onRevertOpening,
   fusing,
@@ -145,6 +146,7 @@ function OpeningBubble({
   onSwitchGreeting?: (index: number) => void
   canSwitch?: boolean
   userName?: string
+  userPersona?: string
   onFuseOpening?: () => void
   onRevertOpening?: () => void
   fusing?: boolean
@@ -156,6 +158,14 @@ function OpeningBubble({
   const activeIndex = Math.min(Math.max(0, greetingIndex), Math.max(0, allGreetings.length - 1))
   const isCustom = Boolean(isGroup && customOpening && customOpening.trim() !== '')
   const message = isCustom ? customOpening! : (allGreetings[activeIndex] ?? card.firstMessage)
+  const macroCtx = useMemo(() => ({
+    charDescription: card.description,
+    charPersonality: card.personality,
+    scenario: card.scenario,
+    userPersona: userPersona,
+    charVersion: card.characterVersion,
+    original: '',
+  }), [card, userPersona])
 
   return (
     <div className="rp-opening">
@@ -232,7 +242,7 @@ function OpeningBubble({
           </>
         )}
       </div>
-      <div className="rp-opening-body">{colorizeProse(replaceMacros(message, card.name, userName), rules)}</div>
+      <div className="rp-opening-body">{colorizeProse(replaceMacros(message, card.name, userName, macroCtx), rules)}</div>
     </div>
   )
 }
@@ -246,6 +256,7 @@ function OpeningInline({
   greetingIndex = 0,
   onSwitchGreeting,
   userName: propUserName,
+  userPersona,
   onFuseOpening,
   onRevertOpening,
   fusing,
@@ -257,6 +268,7 @@ function OpeningInline({
   greetingIndex?: number
   onSwitchGreeting?: (index: number) => void
   userName?: string
+  userPersona?: string
   onFuseOpening?: () => void
   onRevertOpening?: () => void
   fusing?: boolean
@@ -268,6 +280,14 @@ function OpeningInline({
   const activeIndex = Math.min(Math.max(0, greetingIndex), Math.max(0, allGreetings.length - 1))
   const isCustom = Boolean(isGroup && customOpening && customOpening.trim() !== '')
   const message = isCustom ? customOpening! : (allGreetings[activeIndex] ?? card.firstMessage)
+  const macroCtx = useMemo(() => ({
+    charDescription: card.description,
+    charPersonality: card.personality,
+    scenario: card.scenario,
+    userPersona: userPersona,
+    charVersion: card.characterVersion,
+    original: '',
+  }), [card, userPersona])
 
   return (
     <div className="rp-greeting-wrap">
@@ -347,7 +367,7 @@ function OpeningInline({
           )}
         </div>
       </div>
-      <div className="rp-greeting">{colorizeProse(replaceMacros(message, card.name, userName), rules)}</div>
+      <div className="rp-greeting">{colorizeProse(replaceMacros(message, card.name, userName, macroCtx), rules)}</div>
     </div>
   )
 }
@@ -1013,6 +1033,7 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
             greetingIndex={activeGreetingIndex}
             onSwitchGreeting={switchGreeting}
             userName={effectiveUserName}
+            userPersona={matchedPersona?.persona}
             onFuseOpening={isGroup ? fuseOpening : undefined}
             onRevertOpening={revertOpening}
             fusing={fusingOpening}
@@ -1041,6 +1062,7 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
           greetingIndex={activeGreetingIndex}
           onSwitchGreeting={switchGreeting}
           userName={effectiveUserName}
+          userPersona={matchedPersona?.persona}
           onFuseOpening={isGroup ? fuseOpening : undefined}
           onRevertOpening={revertOpening}
           fusing={fusingOpening}
@@ -1080,10 +1102,35 @@ function InstructionTray({ sessionId, staged, reload, onClose }: {
     setText(staged)
   }, [staged])
 
+  const flush = useCallback((valToSave?: string) => {
+    if (saveTimer.current !== undefined) {
+      window.clearTimeout(saveTimer.current)
+      saveTimer.current = undefined
+    }
+    const val = (valToSave !== undefined ? valToSave : text).trim()
+    void api.updateSession(sessionId, { pendingInstruction: val === '' ? null : val })
+      .then(reload)
+      .catch(() => {})
+  }, [sessionId, text, reload])
+
+  useEffect(() => {
+    return () => {
+      if (saveTimer.current !== undefined) {
+        window.clearTimeout(saveTimer.current)
+        saveTimer.current = undefined
+        const val = text.trim()
+        void api.updateSession(sessionId, { pendingInstruction: val === '' ? null : val })
+          .then(reload)
+          .catch(() => {})
+      }
+    }
+  }, [sessionId, text, reload])
+
   const stage = useCallback((value: string) => {
     setText(value)
     if (saveTimer.current !== undefined) window.clearTimeout(saveTimer.current)
     saveTimer.current = window.setTimeout(() => {
+      saveTimer.current = undefined
       void api.updateSession(sessionId, { pendingInstruction: value.trim() === '' ? null : value })
         .then(reload)
         .catch(() => {})
@@ -1133,6 +1180,7 @@ function InstructionTray({ sessionId, staged, reload, onClose }: {
         className="rp-textarea"
         placeholder={t('rp.dock.instruction.hint')}
         value={text}
+        onBlur={() => flush()}
         onChange={event => stage(event.target.value)}
         onKeyDown={event => {
           if (event.key === 'Escape') onClose()
@@ -1164,10 +1212,35 @@ function AuthorNoteTray({ sessionId, note, reload, onClose }: {
     setText(note)
   }, [note])
 
+  const flush = useCallback((valToSave?: string) => {
+    if (saveTimer.current !== undefined) {
+      window.clearTimeout(saveTimer.current)
+      saveTimer.current = undefined
+    }
+    const val = (valToSave !== undefined ? valToSave : text).trim()
+    void api.updateSession(sessionId, { authorNote: val === '' ? null : val })
+      .then(reload)
+      .catch(() => {})
+  }, [sessionId, text, reload])
+
+  useEffect(() => {
+    return () => {
+      if (saveTimer.current !== undefined) {
+        window.clearTimeout(saveTimer.current)
+        saveTimer.current = undefined
+        const val = text.trim()
+        void api.updateSession(sessionId, { authorNote: val === '' ? null : val })
+          .then(reload)
+          .catch(() => {})
+      }
+    }
+  }, [sessionId, text, reload])
+
   const save = useCallback((value: string) => {
     setText(value)
     if (saveTimer.current !== undefined) window.clearTimeout(saveTimer.current)
     saveTimer.current = window.setTimeout(() => {
+      saveTimer.current = undefined
       void api.updateSession(sessionId, { authorNote: value.trim() === '' ? null : value })
         .then(reload)
         .catch(() => {})
@@ -1197,6 +1270,7 @@ function AuthorNoteTray({ sessionId, note, reload, onClose }: {
         className="rp-textarea"
         placeholder={t('rp.dock.an.hint')}
         value={text}
+        onBlur={() => flush()}
         onChange={event => save(event.target.value)}
         onKeyDown={event => {
           if (event.key === 'Escape') onClose()
@@ -1267,10 +1341,35 @@ function MemoryTray({ sessionId, memory, wsPath, reload, onClose }: {
     setText(memory)
   }, [memory])
 
+  const flush = useCallback((valToSave?: string) => {
+    if (saveTimer.current !== undefined) {
+      window.clearTimeout(saveTimer.current)
+      saveTimer.current = undefined
+    }
+    const val = (valToSave !== undefined ? valToSave : text).trim()
+    void api.updateSession(sessionId, { storyMemory: val === '' ? null : val })
+      .then(reload)
+      .catch(() => {})
+  }, [sessionId, text, reload])
+
+  useEffect(() => {
+    return () => {
+      if (saveTimer.current !== undefined) {
+        window.clearTimeout(saveTimer.current)
+        saveTimer.current = undefined
+        const val = text.trim()
+        void api.updateSession(sessionId, { storyMemory: val === '' ? null : val })
+          .then(reload)
+          .catch(() => {})
+      }
+    }
+  }, [sessionId, text, reload])
+
   const save = useCallback((value: string) => {
     setText(value)
     if (saveTimer.current !== undefined) window.clearTimeout(saveTimer.current)
     saveTimer.current = window.setTimeout(() => {
+      saveTimer.current = undefined
       void api.updateSession(sessionId, { storyMemory: value.trim() === '' ? null : value })
         .then(reload)
         .catch(() => {})
@@ -1347,6 +1446,7 @@ function MemoryTray({ sessionId, memory, wsPath, reload, onClose }: {
         rows={4}
         placeholder={t('rp.dock.memory.hint')}
         value={text}
+        onBlur={() => flush()}
         onChange={event => save(event.target.value)}
         onKeyDown={event => {
           if (event.key === 'Escape') onClose()

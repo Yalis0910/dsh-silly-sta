@@ -111,3 +111,4 @@ export function apply(ctx: ClientContext): void {
 }
 
 export { CardEditor }
+export { replaceMacros, type MacroContext } from './colorize.tsx'

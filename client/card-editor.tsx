@@ -8,7 +8,7 @@ import { api, stampedUrl, type CharacterCardDetail, type LorebookSummary, type L
 import { compileCardRules, toHexColor, withColorValue } from './colorize.tsx'
 import { useT, tf } from './i18n.ts'
 
-const LORE_POSITIONS = ['system_top', 'before_char', 'after_char', 'user_top', 'assistant_top', 'at_depth'] as const
+export const LORE_POSITIONS = ['system_top', 'before_char', 'after_char', 'user_top', 'assistant_top', 'at_depth'] as const
 
 /** String-typed card fields rendered as text areas. */
 type TextKey =
@@ -379,6 +379,11 @@ export function CardEditor({ cardId, onClose, onDeleted, onSaved, ws }: {
                       {LORE_POSITIONS.map(position => <option key={position} value={position}>{position}</option>)}
                     </select>
                   </Field>
+                  {entry.position === 'at_depth' ? (
+                    <Field label="深度">
+                      <input type="number" min={0} value={entry.depth ?? 4} onChange={event => patchEntry({ depth: Math.max(0, Number(event.target.value) || 0) })} />
+                    </Field>
+                  ) : null}
                   <Field label={t('rp.editor.book.order')}>
                     <input type="number" value={entry.order} onChange={event => patchEntry({ order: Number(event.target.value) || 0 })} />
                   </Field>

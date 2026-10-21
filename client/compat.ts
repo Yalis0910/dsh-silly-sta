@@ -278,7 +278,7 @@ export function useTrayDismiss(ref: { current: HTMLElement | null }, onClose: ()
       const target = event.target
       if (target instanceof Node) {
         if (el.contains(target)) return
-        if (target instanceof Element && target.closest('.rp-btn')) return
+        if (target instanceof Element && target.closest('.rp-btn, .rp-btn-subtle, .rp-msg-action')) return
         onClose()
       }
     }

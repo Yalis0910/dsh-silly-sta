@@ -59,6 +59,10 @@ export interface SessionState {
   card: {
     id: string
     name: string
+    description?: string
+    personality?: string
+    scenario?: string
+    characterVersion?: string
     firstMessage: string
     alternateGreetings?: string[]
     avatarUrl: string | null

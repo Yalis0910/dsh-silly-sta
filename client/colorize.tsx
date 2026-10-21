@@ -22,12 +22,49 @@ const THINK_RE = /（[^（）\n]*）/g
 /** Speaker prefix in group chat: 【…】 */
 const SPEAKER_RE = /(?:^|\n)\s*(【[^】\n]+】)/g
 
+export interface MacroContext {
+  charDescription?: string | undefined
+  charPersonality?: string | undefined
+  scenario?: string | undefined
+  userPersona?: string | undefined
+  charVersion?: string | undefined
+  original?: string | undefined
+}
+
 /** Replace the card macros with live names (client-side mirror of the host's applyMacros). */
-export function replaceMacros(text: string, charName: string, userName: string): string {
+export function replaceMacros(
+  text: string,
+  charName: string,
+  userName: string,
+  context?: MacroContext,
+): string {
   let result = text
     .replaceAll(/\{\{\s*char\s*\}\}/gi, charName)
     .replaceAll(/\{\{\s*user\s*\}\}/gi, userName)
-    .replaceAll(/\{\{\s*original\s*\}\}/gi, '')
+
+  if (context?.charDescription !== undefined) {
+    result = result.replaceAll(/\{\{\s*description\s*\}\}/gi, context.charDescription)
+  }
+  if (context?.charPersonality !== undefined) {
+    result = result
+      .replaceAll(/\{\{\s*personality\s*\}\}/gi, context.charPersonality)
+      .replaceAll(/\{\{\s*char_persona\s*\}\}/gi, context.charPersonality)
+      .replaceAll(/\{\{\s*char_personality\s*\}\}/gi, context.charPersonality)
+  }
+  if (context?.scenario !== undefined) {
+    result = result.replaceAll(/\{\{\s*scenario\s*\}\}/gi, context.scenario)
+  }
+  if (context?.userPersona !== undefined) {
+    result = result
+      .replaceAll(/\{\{\s*persona\s*\}\}/gi, context.userPersona)
+      .replaceAll(/\{\{\s*user_persona\s*\}\}/gi, context.userPersona)
+  }
+  if (context?.charVersion !== undefined) {
+    result = result.replaceAll(/\{\{\s*char_version\s*\}\}/gi, context.charVersion)
+  }
+
+  result = result
+    .replaceAll(/\{\{\s*original\s*\}\}/gi, context?.original ?? '')
     .replaceAll(/\{\{\s*input\s*\}\}/gi, '')
 
   if (/\{\{\s*(?:time|date|weekday|isodate)\s*\}\}/i.test(result)) {
