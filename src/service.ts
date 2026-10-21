@@ -724,7 +724,7 @@ export class RoleplayService extends Service {
       merged.swipes = { ...existing.swipes, ...patch.swipes }
     }
     // null = "remove the override": the schema keeps these keys absent.
-    for (const key of ['characterId', 'userPersonaId', 'pendingInstruction', 'authorNote', 'storyMemory', 'workspacePath', 'customOpening', 'activeSpeakerId', 'choiceMode'] as const) {
+    for (const key of ['characterId', 'userPersonaId', 'pendingInstruction', 'authorNote', 'authorNoteDepth', 'authorNoteRole', 'groupDietMode', 'storyMemory', 'workspacePath', 'customOpening', 'activeSpeakerId', 'choiceMode'] as const) {
       if (merged[key] === null || merged[key] === '') delete merged[key]
     }
     const next = SessionBinding.parse(merged)

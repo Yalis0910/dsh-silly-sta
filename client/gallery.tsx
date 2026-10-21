@@ -61,9 +61,9 @@ function Tile({ image, selected, onToggleSelect, onToggleStar }: {
         title={image.starred ? t('rp.gallery.unstar') : t('rp.gallery.star')}
         onClick={onToggleStar}
       >
-        {image.starred ? '★' : '☆'}
+        {image.starred ? '已星标' : '星标'}
       </button>
-      <span className={`rp-tile-check${selected ? ' rp-on' : ''}`} aria-hidden>✓</span>
+      <span className={`rp-tile-check${selected ? ' rp-on' : ''}`} aria-hidden>已选</span>
       <span className={`rp-tile-scope rp-scope-tag rp-scope-${image.scope}`}>
         {image.scope === 'global' ? t('rp.scope.global') : t('rp.scope.workspace')}
       </span>

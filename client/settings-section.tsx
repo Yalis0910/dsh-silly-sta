@@ -233,6 +233,41 @@ export function RoleplaySettingsSection(): ReactNode {
           </div>
 
           <div>
+            <h4>{t('rp.dock.an')} & 群聊偏好</h4>
+            <div className="rp-inline">
+              <Field label="A/N 默认深度 (Depth)">
+                <input
+                  type="number" min={0} max={100} value={draft.authorNoteDepth ?? 0}
+                  onChange={event => patch({ authorNoteDepth: Math.max(0, Number(event.target.value) || 0) })}
+                />
+              </Field>
+              <Field label="A/N 默认角色 (Role)">
+                <select
+                  value={draft.authorNoteRole ?? 'system'}
+                  onChange={event => patch({ authorNoteRole: event.target.value as 'system' | 'user' | 'assistant' })}
+                >
+                  <option value="system">system</option>
+                  <option value="user">user</option>
+                  <option value="assistant">assistant</option>
+                </select>
+              </Field>
+            </div>
+            <div className="rp-field" style={{ marginTop: 8 }}>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={draft.groupDietMode ?? false}
+                  onChange={event => patch({ groupDietMode: event.target.checked })}
+                />
+                {' '}群聊默认开启 Token 瘦身模式
+              </label>
+              <span className="rp-note" style={{ display: 'block', marginTop: 4 }}>
+                极度精简非当前发言群友角色设定，限制世界书条目并抑制开场场景，大幅降低高并发 Token 消耗。
+              </span>
+            </div>
+          </div>
+
+          <div>
             <h4>{t('rp.risk.heading')}</h4>
             <span className="rp-note">{t('rp.risk.warning')}</span>
             <RiskToggle
@@ -650,7 +685,7 @@ function CardManager({ onEdit, ws }: { onEdit: (cardId: string) => void; ws: Wor
                       title={card.favorite ? t('rp.cards.unfavorite') : t('rp.cards.favorite')}
                       onClick={() => void api.updateCard(card.id, { favorite: !card.favorite }, wsPath).then(reload).catch(() => {})}
                     >
-                      {card.favorite ? '★' : '☆'}
+                      {card.favorite ? '已收藏' : '收藏'}
                     </button>
                     <span className={`rp-scope-tag rp-scope-${card.scope}`}>
                       {card.scope === 'global' ? t('rp.scope.global') : t('rp.scope.workspace')}
@@ -978,6 +1013,53 @@ function LorebookManager({ ws }: { ws: WorkspaceInfo | undefined }): ReactNode {
                     }}
                   />
                 </div>
+              </div>
+              <div className="rp-inline" style={{ marginTop: 6 }}>
+                <div className="rp-field" style={{ minWidth: 140 }}>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={entry.selective ?? false}
+                      onChange={e => {
+                        const next = [...editingBook.entries]
+                        next[idx] = { ...entry, selective: e.target.checked }
+                        setEditingBook({ ...editingBook, entries: next })
+                      }}
+                    />
+                    {' '}次级过滤 (Selective)
+                  </label>
+                </div>
+                {entry.selective ? (
+                  <>
+                    <Field label="次级关键词 (Secondary Keys)">
+                      <input
+                        value={(entry.secondaryKeys ?? []).join(', ')}
+                        placeholder="必须同时满足的过滤词..."
+                        onChange={e => {
+                          const next = [...editingBook.entries]
+                          next[idx] = {
+                            ...entry,
+                            secondaryKeys: e.target.value.split(/[,，]/).map(k => k.trim()).filter(Boolean),
+                          }
+                          setEditingBook({ ...editingBook, entries: next })
+                        }}
+                      />
+                    </Field>
+                    <Field label="过滤逻辑">
+                      <select
+                        value={entry.selectiveLogic ?? 'and_any'}
+                        onChange={e => {
+                          const next = [...editingBook.entries]
+                          next[idx] = { ...entry, selectiveLogic: e.target.value as 'and_any' | 'not_any' }
+                          setEditingBook({ ...editingBook, entries: next })
+                        }}
+                      >
+                        <option value="and_any">AND ANY (同时命中任意次级键)</option>
+                        <option value="not_any">NOT ANY (排除：命中次级键时不触发)</option>
+                      </select>
+                    </Field>
+                  </>
+                ) : null}
               </div>
             </div>
           ))}

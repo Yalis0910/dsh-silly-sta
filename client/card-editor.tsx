@@ -396,6 +396,40 @@ export function CardEditor({ cardId, onClose, onDeleted, onSaved, ws }: {
                     <input type="checkbox" checked={entry.useRegex} onChange={event => patchEntry({ useRegex: event.target.checked })} />
                   </div>
                 </div>
+                <div className="rp-inline" style={{ marginTop: 6 }}>
+                  <div className="rp-field" style={{ minWidth: 140 }}>
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={entry.selective ?? false}
+                        onChange={event => patchEntry({ selective: event.target.checked })}
+                      />
+                      {' '}次级过滤 (Selective)
+                    </label>
+                  </div>
+                  {entry.selective ? (
+                    <>
+                      <Field label="次级关键词 (Secondary Keys)">
+                        <input
+                          value={(entry.secondaryKeys ?? []).join(', ')}
+                          placeholder="必须同时满足的过滤词..."
+                          onChange={event => patchEntry({
+                            secondaryKeys: event.target.value.split(/[,，]/).map(part => part.trim()).filter(Boolean),
+                          })}
+                        />
+                      </Field>
+                      <Field label="过滤逻辑">
+                        <select
+                          value={entry.selectiveLogic ?? 'and_any'}
+                          onChange={event => patchEntry({ selectiveLogic: event.target.value as 'and_any' | 'not_any' })}
+                        >
+                          <option value="and_any">AND ANY (同时命中任意次级键)</option>
+                          <option value="not_any">NOT ANY (排除：命中次级键时不触发)</option>
+                        </select>
+                      </Field>
+                    </>
+                  ) : null}
+                </div>
               </div>
             )
           })}

@@ -13,5 +13,5 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["client/**/*.ts", "client/**/*.tsx"]
+  "include": ["client/**/*.ts", "client/**/*.tsx", "src/macros.ts"]
 }

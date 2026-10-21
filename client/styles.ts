@@ -157,6 +157,141 @@ export const CSS = `
   white-space: nowrap;
 }
 
+.rp-dock-secondary-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+
+.rp-dock-more-wrap,
+.rp-popover.rp-dock-more-wrap,
+.rp-btn.rp-dock-more-btn {
+  display: none !important;
+  position: relative;
+}
+
+.rp-btn.rp-dock-more-btn {
+  font-weight: bold;
+  letter-spacing: 1px;
+}
+
+.rp-more-tray.rp-more-popover {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  right: 0;
+  left: auto;
+  z-index: 1000;
+  width: 175px;
+  min-width: 160px;
+  padding: 6px;
+  gap: 2px;
+  border-radius: 12px;
+  background: var(--yh-paper);
+  border: 1px solid var(--yh-border-strong);
+  box-shadow: var(--yh-shadow-popover);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  animation: rp-popover-in 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.rp-more-grid.rp-more-menu-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 0;
+}
+
+.rp-more-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--yh-neutral-8);
+  font-size: 12px;
+  font-family: var(--yh-font-sans);
+  cursor: pointer;
+  text-align: left;
+  user-select: none;
+  transition: all 0.15s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.rp-more-menu-item:hover {
+  background: var(--yh-accent-soft);
+  color: var(--yh-accent);
+}
+
+.rp-more-menu-item.rp-on {
+  color: var(--yh-accent);
+  font-weight: 500;
+}
+
+/* ── Unified Story & Director Studio Tray Tabs ── */
+.rp-studio-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.rp-studio-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--yh-neutral-2);
+  padding: 3px;
+  border-radius: 8px;
+  border: 1px solid var(--yh-border);
+  flex-wrap: wrap;
+}
+
+.rp-studio-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--yh-neutral-8);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.rp-studio-tab:hover {
+  background: var(--yh-neutral-3);
+  color: var(--yh-neutral-10);
+}
+
+.rp-studio-tab.rp-active {
+  background: var(--yh-paper);
+  color: var(--yh-accent);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.rp-tab-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--yh-accent);
+}
+
+.rp-btn-diet-on {
+  background: rgba(34, 197, 94, 0.15) !important;
+  color: #16a34a !important;
+  border: 1px solid rgba(34, 197, 94, 0.4) !important;
+  font-weight: 600;
+}
+
 .rp-avatar {
   width: 34px;
   height: 34px;
@@ -1143,7 +1278,7 @@ export const CSS = `
   flex: none;
 }
 
-/* ⚠️ Clamped description: max 2 lines with ellipsis to stop vertical explosion */
+/* Clamped description: max 2 lines with ellipsis to stop vertical explosion */
 .rp-cardrow-desc {
   font-family: var(--yh-font-sans);
   font-size: 12px;
@@ -1875,6 +2010,17 @@ body:not([data-rp-active="1"]) [data-chat-flow-kind="tool-call"][data-turn-proce
 }
 
 /* ── Mobile (MOB) & Tablet Responsive Compatibility ─────────────────── */
+@media (max-width: 860px) {
+  .rp-dock-secondary-group {
+    display: none !important;
+  }
+  .rp-dock-more-wrap,
+  .rp-popover.rp-dock-more-wrap,
+  .rp-btn.rp-dock-more-btn {
+    display: inline-flex !important;
+  }
+}
+
 @media (max-width: 768px) {
   .rp-dock {
     width: calc(100% - 12px);
@@ -2107,6 +2253,10 @@ body:not([data-rp-active="1"]) [data-chat-flow-kind="tool-call"][data-turn-proce
   font-feature-settings: 'tnum';
   padding: 0 3px;
   font-size: 11px;
+}
+
+.rp-assistant-editbox {
+  animation: rp-fade-in 0.15s ease-out;
 }
 
 /* ── Mounted lorebooks & Worldbook manager ── */

@@ -176,7 +176,7 @@ function OpeningBubble({
         {isCustom ? (
           <>
             <span className="rp-scope-tag rp-scope-global" style={{ marginLeft: 6, fontSize: 11 }}>
-              🪄 {t('rp.dock.group.fusedOpening')}
+              {t('rp.dock.group.fusedOpening')}
             </span>
             {onRevertOpening ? (
               <button
@@ -186,7 +186,7 @@ function OpeningBubble({
                 onClick={onRevertOpening}
                 title={t('rp.dock.group.revertOpeningTitle')}
               >
-                ↩️ {t('rp.dock.group.revertOpening')}
+                {t('rp.dock.group.revertOpening')}
               </button>
             ) : null}
             {onFuseOpening ? (
@@ -198,7 +198,7 @@ function OpeningBubble({
                 onClick={onFuseOpening}
                 title="让 AI 重新融合生成新的群聊开场"
               >
-                {fusing ? t('rp.dock.group.fusing') : `🪄 ${t('rp.dock.group.refuseOpening')}`}
+                {fusing ? t('rp.dock.group.fusing') : t('rp.dock.group.refuseOpening')}
               </button>
             ) : null}
           </>
@@ -236,7 +236,7 @@ function OpeningBubble({
                 onClick={onFuseOpening}
                 title="让 AI 将全员的开场情境无缝融合为同一时空的群戏开局"
               >
-                {fusing ? t('rp.dock.group.fusing') : `🪄 ${t('rp.dock.group.fuse')}`}
+                {fusing ? t('rp.dock.group.fusing') : t('rp.dock.group.fuse')}
               </button>
             ) : null}
           </>
@@ -295,7 +295,7 @@ function OpeningInline({
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           {isCustom ? (
             <span className="rp-scope-tag rp-scope-global" style={{ fontSize: 11 }}>
-              🪄 {t('rp.dock.group.fusedOpening')}
+              {t('rp.dock.group.fusedOpening')}
             </span>
           ) : (
             <span className="rp-note">可选开场 ({activeIndex + 1}/{allGreetings.length})</span>
@@ -312,7 +312,7 @@ function OpeningInline({
                   onClick={onRevertOpening}
                   title={t('rp.dock.group.revertOpeningTitle')}
                 >
-                  ↩️ {t('rp.dock.group.revertOpening')}
+                  {t('rp.dock.group.revertOpening')}
                 </button>
               ) : null}
               {onFuseOpening ? (
@@ -324,7 +324,7 @@ function OpeningInline({
                   onClick={onFuseOpening}
                   title="让 AI 重新融合生成新的群聊开场"
                 >
-                  {fusing ? t('rp.dock.group.fusing') : `🪄 ${t('rp.dock.group.refuseOpening')}`}
+                  {fusing ? t('rp.dock.group.fusing') : t('rp.dock.group.refuseOpening')}
                 </button>
               ) : null}
             </>
@@ -360,7 +360,7 @@ function OpeningInline({
                   onClick={onFuseOpening}
                   title="让 AI 将全员的开场情境无缝融合为同一时空的群戏开局"
                 >
-                  {fusing ? t('rp.dock.group.fusing') : `🪄 ${t('rp.dock.group.fuse')}`}
+                  {fusing ? t('rp.dock.group.fusing') : t('rp.dock.group.fuse')}
                 </button>
               ) : null}
             </>
@@ -416,7 +416,7 @@ function InviteCardTray({
   return (
     <div ref={panelRef} className="rp-tray-panel" style={{ maxHeight: 400, overflowY: 'auto' }}>
       <div className="rp-tray-header">
-        <span className="rp-tray-title">👥 {t('rp.dock.group.inviteCard')} ({availableCards.length})</span>
+        <span className="rp-tray-title">{t('rp.dock.group.inviteCard')} ({availableCards.length})</span>
         <div className="rp-tray-actions">
           {availableCards.length > 4 ? (
             <input
@@ -434,7 +434,7 @@ function InviteCardTray({
       {availableCards.length === 0 ? (
         <div style={{ padding: '16px 8px', textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 6 }}>
           <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--yh-neutral-9)' }}>
-            🎉 {t('rp.dock.group.allCardsJoined')}
+            {t('rp.dock.group.allCardsJoined')}
           </span>
           {joinedNames.length > 0 ? (
             <span className="rp-muted" style={{ fontSize: 12 }}>
@@ -460,7 +460,7 @@ function InviteCardTray({
                   <span className={`rp-scope-tag rp-scope-${card.scope}`}>
                     {card.scope === 'global' ? t('rp.scope.global') : t('rp.scope.workspace')}
                   </span>
-                  {card.favorite ? '★ ' : ''}{card.name}
+                  {card.favorite ? '[收藏] ' : ''}{card.name}
                 </span>
                 <span className="rp-cardnote">{card.creatorNotes || card.description || `${card.bookEntries}${t('rp.cards.lore')}`}</span>
               </span>
@@ -485,9 +485,13 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
   const [cards, setCards] = useState<CardSummary[] | null>(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
-  const [activeTray, setActiveTray] = useState<'none' | 'instruction' | 'note' | 'memory' | 'inspector'>('none')
+  const [activeTray, setActiveTray] = useState<'none' | 'studio' | 'more'>('none')
+  const [studioTab, setStudioTab] = useState<'an' | 'memory' | 'instruction' | 'inspector'>('an')
   const [inviteOpen, setInviteOpen] = useState(false)
   const [fusingOpening, setFusingOpening] = useState(false)
+  const [pickerSearch, setPickerSearch] = useState('')
+  const [pickerFilter, setPickerFilter] = useState<'all' | 'fav' | 'workspace' | 'global'>('all')
+  const [dietModeOverride, setDietModeOverride] = useState<boolean | null>(null)
 
   /** This session's workspace path — recorded on the binding for host-side stores.
       Subscribed: the workspaces feed loads async and this must follow it in. */
@@ -504,6 +508,7 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
 
   useEffect(() => {
     setState(null)
+    setDietModeOverride(null)
     reload()
   }, [reload])
 
@@ -617,6 +622,24 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
     return (cards ?? []).filter(c => !currentGroupIds.includes(c.id))
   }, [cards, currentGroupIds])
 
+  const filteredPickerCards = useMemo(() => {
+    if (!cards) return null
+    return cards.filter(card => {
+      if (pickerFilter === 'fav' && !card.favorite) return false
+      if (pickerFilter === 'workspace' && card.scope !== 'workspace') return false
+      if (pickerFilter === 'global' && card.scope !== 'global') return false
+      if (pickerSearch.trim()) {
+        const q = pickerSearch.trim().toLowerCase()
+        const nameMatch = card.name.toLowerCase().includes(q)
+        const descMatch = (card.description || '').toLowerCase().includes(q)
+        const notesMatch = (card.creatorNotes || '').toLowerCase().includes(q)
+        const tagsMatch = card.tags.some(tag => tag.toLowerCase().includes(q))
+        if (!nameMatch && !descMatch && !notesMatch && !tagsMatch) return false
+      }
+      return true
+    })
+  }, [cards, pickerFilter, pickerSearch])
+
   const addMember = useCallback(async (cardId: string) => {
     if (!state?.binding) return
     const current = state.binding.groupCardIds && state.binding.groupCardIds.length > 0
@@ -694,6 +717,9 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
   }, [sessionId, reload])
 
   const choiceMode = state ? (state.binding?.choiceMode ?? state.choiceModeDefault) : false
+  const groupDietMode = dietModeOverride !== null
+    ? dietModeOverride
+    : (state ? Boolean(state.binding?.groupDietMode ?? state.groupDietModeDefault) : false)
   const holder = usePendingHolder(pending && mode === 'roleplay' && bound !== null)
   // The opening bubble lives at the top of the flow once real messages exist;
   // on a blank session it previews inside the dock instead (no flow column yet).
@@ -737,13 +763,60 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
           </span>
         ) : null}
         </div>
+        {cards && cards.length > 3 ? (
+          <div className="rp-card-toolbar" style={{ marginTop: 2, marginBottom: 4 }}>
+            <div className="rp-search-box">
+              <input
+                className="rp-card-search"
+                placeholder={t('rp.cards.searchPlaceholder')}
+                value={pickerSearch}
+                onChange={e => setPickerSearch(e.target.value)}
+              />
+              {pickerSearch ? (
+                <button type="button" className="rp-search-clear" onClick={() => setPickerSearch('')}>×</button>
+              ) : null}
+            </div>
+            <div className="rp-filter-pills">
+              <button
+                type="button"
+                className={`rp-filter-pill${pickerFilter === 'all' ? ' rp-active' : ''}`}
+                onClick={() => setPickerFilter('all')}
+              >
+                {t('rp.cards.filterAll')}
+              </button>
+              <button
+                type="button"
+                className={`rp-filter-pill${pickerFilter === 'fav' ? ' rp-active' : ''}`}
+                onClick={() => setPickerFilter('fav')}
+              >
+                {t('rp.cards.filterFav')}
+              </button>
+              <button
+                type="button"
+                className={`rp-filter-pill${pickerFilter === 'workspace' ? ' rp-active' : ''}`}
+                onClick={() => setPickerFilter('workspace')}
+              >
+                {t('rp.scope.workspace')}
+              </button>
+              <button
+                type="button"
+                className={`rp-filter-pill${pickerFilter === 'global' ? ' rp-active' : ''}`}
+                onClick={() => setPickerFilter('global')}
+              >
+                {t('rp.scope.global')}
+              </button>
+            </div>
+          </div>
+        ) : null}
         {cards === null ? (
           <span className="rp-muted">{t('rp.dock.loading')}</span>
         ) : cards.length === 0 ? (
           <span className="rp-muted">{t('rp.dock.noCards')}</span>
+        ) : filteredPickerCards && filteredPickerCards.length === 0 ? (
+          <span className="rp-muted">{t('rp.cards.noMatch')}</span>
         ) : (
           <div className="rp-cardgrid">
-            {cards.map(card => (
+            {filteredPickerCards?.map(card => (
               <button key={`${card.scope}-${card.id}`} className="rp-cardcell" disabled={busy} onClick={() => void pick(card.id)}>
                 <Avatar url={card.avatarUrl ? stampedUrl(card.avatarUrl, card.updatedAt) : null} name={card.name} />
                 <span className="rp-cardcell-text">
@@ -751,7 +824,7 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
                     <span className={`rp-scope-tag rp-scope-${card.scope}`}>
                       {card.scope === 'global' ? t('rp.scope.global') : t('rp.scope.workspace')}
                     </span>
-                    {card.favorite ? '★ ' : ''}{card.name}
+                    {card.favorite ? '[收藏] ' : ''}{card.name}
                   </span>
                   <span className="rp-cardnote">{card.creatorNotes || card.description || `${card.bookEntries}${t('rp.cards.lore')}`}</span>
                 </span>
@@ -804,55 +877,62 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
   ) : null
 
   const hasStoryMemory = (state.binding?.storyMemory ?? '').trim() !== ''
-  const storyMemoryButton = !isForge ? (
-    <button
-      type="button"
-      className={`rp-btn${activeTray === 'memory' ? ' rp-active' : ''}${hasStoryMemory ? ' rp-on' : ''}`}
-      title={t('rp.dock.memory.title')}
-      onClick={() => setActiveTray(prev => (prev === 'memory' ? 'none' : 'memory'))}
-    >
-      {t('rp.dock.memory')}{hasStoryMemory ? ' ●' : ''}
-    </button>
-  ) : null
-
   const hasAuthorNote = (state.binding?.authorNote ?? '').trim() !== ''
-  const authorNoteButton = !isForge ? (
-    <button
-      type="button"
-      className={`rp-btn${activeTray === 'note' ? ' rp-active' : ''}${hasAuthorNote ? ' rp-on' : ''}`}
-      title={t('rp.dock.an.title')}
-      onClick={() => setActiveTray(prev => (prev === 'note' ? 'none' : 'note'))}
-    >
-      {t('rp.dock.an')}{hasAuthorNote ? ' ●' : ''}
-    </button>
-  ) : null
-
   const hasInstruction = (state.binding?.pendingInstruction ?? '').trim() !== ''
-  const stagedInstructionButton = !isForge ? (
-    <button
-      type="button"
-      className={`rp-btn${activeTray === 'instruction' ? ' rp-active' : ''}${hasInstruction ? ' rp-on' : ''}`}
-      title={t('rp.dock.instruction.title')}
-      onClick={() => setActiveTray(prev => (prev === 'instruction' ? 'none' : 'instruction'))}
-    >
-      {t('rp.dock.instruction')}{hasInstruction ? ' ●' : ''}
-    </button>
-  ) : null
+  const hasAnyStudio = hasAuthorNote || hasStoryMemory || hasInstruction
 
-  const inspectorButton = !isForge ? (
+  const studioButton = !isForge ? (
     <button
       type="button"
-      className={`rp-btn${activeTray === 'inspector' ? ' rp-active' : ''}`}
-      title={t('rp.dock.inspector.title')}
-      onClick={() => setActiveTray(prev => (prev === 'inspector' ? 'none' : 'inspector'))}
+      className={`rp-btn${activeTray === 'studio' ? ' rp-active' : ''}${hasAnyStudio ? ' rp-on' : ''}`}
+      title={t('rp.dock.studio.title')}
+      onClick={() => setActiveTray(prev => (prev === 'studio' ? 'none' : 'studio'))}
     >
-      {t('rp.dock.inspector')}
+      {t('rp.dock.studio')}{hasAnyStudio ? ' (已设)' : ''}
     </button>
   ) : null
 
   const continueButton = !isForge
     ? <button type="button" className="rp-btn" onClick={() => { inputActions.setDraft('（继续）'); inputActions.submit() }}>{t('rp.dock.continue')}</button>
     : null
+
+  const morePopover = !isForge ? (
+    <div className="rp-popover rp-dock-more-wrap">
+      <button
+        type="button"
+        className={`rp-btn rp-dock-more-btn${activeTray === 'more' ? ' rp-active' : ''}`}
+        title={t('rp.dock.more')}
+        onClick={() => setActiveTray(prev => (prev === 'more' ? 'none' : 'more'))}
+      >
+        ···
+      </button>
+      {activeTray === 'more' ? (
+        <MoreMenuPopover
+          choiceMode={Boolean(choiceMode)}
+          onToggleChoice={() => {
+            void api.updateSession(sessionId, { choiceMode: !choiceMode }).then(reload).catch(() => {})
+          }}
+          hasAnyStudio={hasAnyStudio}
+          onOpenStudio={() => {
+            setActiveTray('studio')
+          }}
+          onContinue={() => {
+            inputActions.setDraft('（继续）')
+            inputActions.submit()
+          }}
+          onSwitch={() => {
+            void api.updateSession(sessionId, {
+              characterId: null,
+              groupCardIds: [],
+              activeSpeakerId: null,
+              customOpening: null,
+            }).then(() => { setCards(null); reload() }).catch(() => {})
+          }}
+          onClose={() => setActiveTray('none')}
+        />
+      ) : null}
+    </div>
+  ) : null
   const switchButton = (
     <button
       type="button"
@@ -887,7 +967,7 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
                   >
                     <Avatar url={member.avatarUrl ? stampedUrl(member.avatarUrl, member.updatedAt) : null} name={member.name} />
                     <span>{member.name}</span>
-                    {isSpeaker ? <span className="rp-group-crown">👑</span> : null}
+                    {isSpeaker ? <span className="rp-group-crown">[主讲]</span> : null}
                     {groupCards.length > 1 ? (
                       <span
                         className="rp-group-remove"
@@ -909,7 +989,7 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
                 onClick={() => setInviteOpen(prev => !prev)}
                 title={t('rp.dock.group.inviteCard')}
               >
-                ➕ {t('rp.dock.group.invite')}
+                {t('rp.dock.group.invite')}
               </button>
             </div>
 
@@ -927,6 +1007,32 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
                 <option value="manual">{t('rp.dock.group.mode.manual')}</option>
               </select>
 
+              <button
+                type="button"
+                className={`rp-btn-subtle${groupDietMode ? ' rp-btn-diet-on' : ''}`}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 3,
+                  padding: '3px 8px',
+                  borderRadius: 6,
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                }}
+                onClick={() => {
+                  const next = !groupDietMode
+                  setDietModeOverride(next)
+                  void api.updateSession(sessionId, { groupDietMode: next })
+                    .then(reload)
+                    .catch(err => {
+                      setError(String(err instanceof Error ? err.message : err))
+                    })
+                }}
+                title={t('rp.dock.group.dietTitle')}
+              >
+                {t('rp.dock.group.diet')}{groupDietMode ? '·开' : '·关'}
+              </button>
+
               {activeSpeaker ? (
                 <button
                   type="button"
@@ -936,7 +1042,7 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
                   }}
                   title={tf(t('rp.dock.group.talkTo'), { name: activeSpeaker.name })}
                 >
-                  🗣️ 对{activeSpeaker.name}说
+                  对{activeSpeaker.name}说
                 </button>
               ) : null}
 
@@ -946,7 +1052,7 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
                 onClick={exitGroup}
                 title={t('rp.dock.group.exitTitle')}
               >
-                🚪 {t('rp.dock.group.exit')}
+                {t('rp.dock.group.exit')}
               </button>
             </div>
           </div>
@@ -965,18 +1071,18 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
               onClick={() => setInviteOpen(prev => !prev)}
               title={t('rp.dock.group.inviteCard')}
             >
-              ➕ {t('rp.dock.group.invite')}
+              {t('rp.dock.group.invite')}
             </button>
           ) : null}
           {personaSelect}
           {isForge ? <span className="rp-muted">{t('rp.dock.forge.editing')}</span> : null}
           <span className="rp-spacer" />
-          {toggles}
-          {storyMemoryButton}
-          {authorNoteButton}
-          {stagedInstructionButton}
-          {inspectorButton}
-          {continueButton}
+          <div className="rp-dock-secondary-group">
+            {toggles}
+            {studioButton}
+            {continueButton}
+          </div>
+          {morePopover}
           {switchButton}
         </div>
 
@@ -992,35 +1098,15 @@ function RoleplayBar({ sessionId, inputActions, blank, mode, pending, running }:
           />
         ) : null}
 
-        {activeTray === 'memory' ? (
-          <MemoryTray
-            sessionId={sessionId}
-            memory={state.binding?.storyMemory ?? ''}
-            wsPath={wsPath}
-            reload={reload}
-            onClose={() => setActiveTray('none')}
-          />
-        ) : null}
-        {activeTray === 'instruction' ? (
-          <InstructionTray
-            sessionId={sessionId}
-            staged={state.binding?.pendingInstruction ?? ''}
-            reload={reload}
-            onClose={() => setActiveTray('none')}
-          />
-        ) : null}
-        {activeTray === 'note' ? (
-          <AuthorNoteTray
-            sessionId={sessionId}
-            note={state.binding?.authorNote ?? ''}
-            reload={reload}
-            onClose={() => setActiveTray('none')}
-          />
-        ) : null}
-        {activeTray === 'inspector' ? (
-          <InspectorTray
+        {activeTray === 'studio' ? (
+          <StoryStudioTray
             sessionId={sessionId}
             wsPath={wsPath}
+            binding={state.binding}
+            authorNoteDefaultDepth={state.authorNoteDepthDefault ?? 0}
+            authorNoteDefaultRole={state.authorNoteRoleDefault ?? 'system'}
+            initialTab={studioTab}
+            reload={reload}
             onClose={() => setActiveTray('none')}
           />
         ) : null}
@@ -1081,14 +1167,11 @@ const INSTRUCTION_PRESETS = [
   { labelKey: 'rp.dock.preset.clash', textKey: 'rp.dock.preset.clash.text' },
 ] as const
 
-function InstructionTray({ sessionId, staged, reload, onClose }: {
+function InstructionContent({ sessionId, staged, reload }: {
   sessionId: string
   staged: string
   reload: () => void
-  onClose: () => void
 }): React.ReactNode {
-  const panelRef = useRef<HTMLDivElement | null>(null)
-  useTrayDismiss(panelRef, onClose)
   const t = useT()
   const [text, setText] = useState(staged)
   const ref = useRef<HTMLTextAreaElement | null>(null)
@@ -1150,17 +1233,13 @@ function InstructionTray({ sessionId, staged, reload, onClose }: {
   }, [text, stage])
 
   return (
-    <div ref={panelRef} className="rp-tray-panel">
-      <div className="rp-tray-header">
-        <span className="rp-tray-title">{t('rp.dock.instruction')}</span>
-        <div className="rp-tray-actions">
-          {text.trim() ? (
-            <button type="button" className="rp-btn-subtle" onClick={clear}>
-              {t('rp.dock.instruction.clear')}
-            </button>
-          ) : null}
-          <button type="button" className="rp-popover-close" onClick={onClose} title="关闭">×</button>
-        </div>
+    <div>
+      <div className="rp-tray-actions" style={{ marginBottom: 6, display: 'flex', justifyContent: 'flex-end' }}>
+        {text.trim() ? (
+          <button type="button" className="rp-btn-subtle" onClick={clear}>
+            {t('rp.dock.instruction.clear')}
+          </button>
+        ) : null}
       </div>
       <div className="rp-chip-row">
         {INSTRUCTION_PRESETS.map((p) => (
@@ -1182,25 +1261,23 @@ function InstructionTray({ sessionId, staged, reload, onClose }: {
         value={text}
         onBlur={() => flush()}
         onChange={event => stage(event.target.value)}
-        onKeyDown={event => {
-          if (event.key === 'Escape') onClose()
-        }}
       />
       <span className="rp-note">{t('rp.dock.instruction.note')}</span>
     </div>
   )
 }
 
-function AuthorNoteTray({ sessionId, note, reload, onClose }: {
+function AuthorNoteContent({ sessionId, note, depth, role, reload }: {
   sessionId: string
   note: string
+  depth: number
+  role: 'system' | 'user' | 'assistant'
   reload: () => void
-  onClose: () => void
 }): React.ReactNode {
-  const panelRef = useRef<HTMLDivElement | null>(null)
-  useTrayDismiss(panelRef, onClose)
   const t = useT()
   const [text, setText] = useState(note)
+  const [currentDepth, setCurrentDepth] = useState(depth)
+  const [currentRole, setCurrentRole] = useState(role)
   const ref = useRef<HTMLTextAreaElement | null>(null)
   const saveTimer = useRef<number | undefined>(undefined)
 
@@ -1211,6 +1288,14 @@ function AuthorNoteTray({ sessionId, note, reload, onClose }: {
   useEffect(() => {
     setText(note)
   }, [note])
+
+  useEffect(() => {
+    setCurrentDepth(depth)
+  }, [depth])
+
+  useEffect(() => {
+    setCurrentRole(role)
+  }, [role])
 
   const flush = useCallback((valToSave?: string) => {
     if (saveTimer.current !== undefined) {
@@ -1253,17 +1338,48 @@ function AuthorNoteTray({ sessionId, note, reload, onClose }: {
   }, [save])
 
   return (
-    <div ref={panelRef} className="rp-tray-panel">
-      <div className="rp-tray-header">
-        <span className="rp-tray-title">{t('rp.dock.an')}</span>
-        <div className="rp-tray-actions">
-          {text.trim() ? (
-            <button type="button" className="rp-btn-subtle" onClick={clear}>
-              {t('rp.dock.instruction.clear')}
-            </button>
-          ) : null}
-          <button type="button" className="rp-popover-close" onClick={onClose} title="关闭">×</button>
+    <div>
+      <div className="rp-tray-actions" style={{ marginBottom: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div className="rp-inline" style={{ gap: 10, fontSize: 12, alignItems: 'center' }}>
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <span className="rp-muted" title={t('rp.dock.an.depthHint')}>{t('rp.dock.an.depth')}:</span>
+            <input
+              type="number"
+              min={0}
+              max={100}
+              className="rp-input"
+              style={{ width: 52, padding: '2px 4px', fontSize: 12 }}
+              value={currentDepth}
+              onChange={e => {
+                const val = Math.max(0, parseInt(e.target.value, 10) || 0)
+                setCurrentDepth(val)
+                void api.updateSession(sessionId, { authorNoteDepth: val }).then(reload).catch(() => {})
+              }}
+            />
+          </label>
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <span className="rp-muted">{t('rp.dock.an.role')}:</span>
+            <select
+              className="rp-persona-select"
+              style={{ padding: '2px 4px', fontSize: 12 }}
+              value={currentRole}
+              onChange={e => {
+                const val = e.target.value as 'system' | 'user' | 'assistant'
+                setCurrentRole(val)
+                void api.updateSession(sessionId, { authorNoteRole: val }).then(reload).catch(() => {})
+              }}
+            >
+              <option value="system">system</option>
+              <option value="user">user</option>
+              <option value="assistant">assistant</option>
+            </select>
+          </label>
         </div>
+        {text.trim() ? (
+          <button type="button" className="rp-btn-subtle" onClick={clear}>
+            {t('rp.dock.instruction.clear')}
+          </button>
+        ) : null}
       </div>
       <textarea
         ref={ref}
@@ -1272,11 +1388,65 @@ function AuthorNoteTray({ sessionId, note, reload, onClose }: {
         value={text}
         onBlur={() => flush()}
         onChange={event => save(event.target.value)}
-        onKeyDown={event => {
-          if (event.key === 'Escape') onClose()
-        }}
       />
       <span className="rp-note">{t('rp.dock.an.note')}</span>
+    </div>
+  )
+}
+
+function MoreMenuPopover({
+  choiceMode,
+  onToggleChoice,
+  hasAnyStudio,
+  onOpenStudio,
+  onContinue,
+  onSwitch,
+  onClose,
+}: {
+  choiceMode: boolean
+  onToggleChoice: () => void
+  hasAnyStudio: boolean
+  onOpenStudio: () => void
+  onContinue: () => void
+  onSwitch: () => void
+  onClose: () => void
+}): React.ReactNode {
+  const panelRef = useRef<HTMLDivElement | null>(null)
+  useTrayDismiss(panelRef, onClose)
+  const t = useT()
+
+  return (
+    <div ref={panelRef} className="rp-popover-panel rp-more-popover rp-more-tray">
+      <div className="rp-more-menu-list rp-more-grid">
+        <button
+          type="button"
+          className={`rp-more-menu-item${choiceMode ? ' rp-on' : ''}`}
+          onClick={() => { onToggleChoice(); onClose() }}
+        >
+          <span>{t('rp.dock.choiceMode')}{choiceMode ? t('rp.dock.choiceOn') : t('rp.dock.choiceOff')}</span>
+        </button>
+        <button
+          type="button"
+          className={`rp-more-menu-item${hasAnyStudio ? ' rp-on' : ''}`}
+          onClick={() => { onClose(); onOpenStudio() }}
+        >
+          <span>{t('rp.dock.studio')}{hasAnyStudio ? ' (已设)' : ''}</span>
+        </button>
+        <button
+          type="button"
+          className="rp-more-menu-item"
+          onClick={() => { onContinue(); onClose() }}
+        >
+          <span>{t('rp.dock.continue')}</span>
+        </button>
+        <button
+          type="button"
+          className="rp-more-menu-item"
+          onClick={() => { onSwitch(); onClose() }}
+        >
+          <span>{t('rp.dock.switchChar')}</span>
+        </button>
+      </div>
     </div>
   )
 }
@@ -1288,15 +1458,12 @@ const MEMORY_CHIPS = [
   { labelKey: 'rp.dock.memory.chip.status', prefix: '[状态] ' },
 ] as const
 
-function MemoryTray({ sessionId, memory, wsPath, reload, onClose }: {
+function MemoryContent({ sessionId, memory, wsPath, reload }: {
   sessionId: string
   memory: string
   wsPath?: string
   reload: () => void
-  onClose: () => void
 }): React.ReactNode {
-  const panelRef = useRef<HTMLDivElement | null>(null)
-  useTrayDismiss(panelRef, onClose)
   const t = useT()
   const [text, setText] = useState(memory)
   const [recapLoading, setRecapLoading] = useState(false)
@@ -1330,8 +1497,6 @@ function MemoryTray({ sessionId, memory, wsPath, reload, onClose }: {
     void api.updateSession(sessionId, { storyMemory: recapResult }).then(reload).catch(() => {})
     setRecapResult(null)
   }, [sessionId, recapResult, reload])
-
-
 
   useEffect(() => {
     ref.current?.focus()
@@ -1389,26 +1554,22 @@ function MemoryTray({ sessionId, memory, wsPath, reload, onClose }: {
   }, [text, save])
 
   return (
-    <div ref={panelRef} className="rp-tray-panel">
-      <div className="rp-tray-header">
-        <span className="rp-tray-title">{t('rp.dock.memory')}</span>
-        <div className="rp-tray-actions">
-          <button
-            type="button"
-            className="rp-btn-subtle rp-btn-recap"
-            disabled={recapLoading}
-            onClick={triggerRecap}
-            title={t('rp.dock.memory.recapTitle')}
-          >
-            {recapLoading ? t('rp.dock.memory.recapping') : t('rp.dock.memory.recap')}
+    <div>
+      <div className="rp-tray-actions" style={{ marginBottom: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <button
+          type="button"
+          className="rp-btn-subtle rp-btn-recap"
+          disabled={recapLoading}
+          onClick={triggerRecap}
+          title={t('rp.dock.memory.recapTitle')}
+        >
+          {recapLoading ? t('rp.dock.memory.recapping') : t('rp.dock.memory.recap')}
+        </button>
+        {text.trim() ? (
+          <button type="button" className="rp-btn-subtle" onClick={clear}>
+            {t('rp.dock.instruction.clear')}
           </button>
-          {text.trim() ? (
-            <button type="button" className="rp-btn-subtle" onClick={clear}>
-              {t('rp.dock.instruction.clear')}
-            </button>
-          ) : null}
-          <button type="button" className="rp-popover-close" onClick={onClose} title="关闭">×</button>
-        </div>
+        ) : null}
       </div>
       <div className="rp-chip-row">
         {MEMORY_CHIPS.map(chip => (
@@ -1448,11 +1609,112 @@ function MemoryTray({ sessionId, memory, wsPath, reload, onClose }: {
         value={text}
         onBlur={() => flush()}
         onChange={event => save(event.target.value)}
-        onKeyDown={event => {
-          if (event.key === 'Escape') onClose()
-        }}
       />
       <span className="rp-note">{t('rp.dock.memory.note')}</span>
+    </div>
+  )
+}
+
+function StoryStudioTray({
+  sessionId,
+  wsPath,
+  binding,
+  authorNoteDefaultDepth = 0,
+  authorNoteDefaultRole = 'system',
+  initialTab = 'an',
+  reload,
+  onClose,
+}: {
+  sessionId: string
+  wsPath?: string
+  binding: SessionState['binding']
+  authorNoteDefaultDepth?: number
+  authorNoteDefaultRole?: 'system' | 'user' | 'assistant'
+  initialTab?: 'an' | 'memory' | 'instruction' | 'inspector'
+  reload: () => void
+  onClose: () => void
+}): React.ReactNode {
+  const panelRef = useRef<HTMLDivElement | null>(null)
+  useTrayDismiss(panelRef, onClose)
+  const t = useT()
+  const [tab, setTab] = useState<'an' | 'memory' | 'instruction' | 'inspector'>(initialTab)
+
+  const hasAuthorNote = Boolean((binding?.authorNote ?? '').trim())
+  const hasStoryMemory = Boolean((binding?.storyMemory ?? '').trim())
+  const hasInstruction = Boolean((binding?.pendingInstruction ?? '').trim())
+
+  return (
+    <div ref={panelRef} className="rp-tray-panel rp-studio-tray">
+      <div className="rp-studio-header">
+        <div className="rp-studio-tabs">
+          <button
+            type="button"
+            className={`rp-studio-tab${tab === 'an' ? ' rp-active' : ''}`}
+            onClick={() => setTab('an')}
+          >
+            {t('rp.dock.an')}
+            {hasAuthorNote ? <span className="rp-tab-dot" /> : null}
+          </button>
+          <button
+            type="button"
+            className={`rp-studio-tab${tab === 'memory' ? ' rp-active' : ''}`}
+            onClick={() => setTab('memory')}
+          >
+            {t('rp.dock.memory')}
+            {hasStoryMemory ? <span className="rp-tab-dot" /> : null}
+          </button>
+          <button
+            type="button"
+            className={`rp-studio-tab${tab === 'instruction' ? ' rp-active' : ''}`}
+            onClick={() => setTab('instruction')}
+          >
+            {t('rp.dock.instruction')}
+            {hasInstruction ? <span className="rp-tab-dot" /> : null}
+          </button>
+          <button
+            type="button"
+            className={`rp-studio-tab${tab === 'inspector' ? ' rp-active' : ''}`}
+            onClick={() => setTab('inspector')}
+          >
+            {t('rp.dock.inspector')}
+          </button>
+        </div>
+        <button type="button" className="rp-popover-close" onClick={onClose} title="关闭">×</button>
+      </div>
+
+      <div className="rp-studio-content">
+        {tab === 'an' ? (
+          <AuthorNoteContent
+            sessionId={sessionId}
+            note={binding?.authorNote ?? ''}
+            depth={binding?.authorNoteDepth ?? authorNoteDefaultDepth}
+            role={binding?.authorNoteRole ?? authorNoteDefaultRole}
+            reload={reload}
+          />
+        ) : null}
+        {tab === 'memory' ? (
+          <MemoryContent
+            sessionId={sessionId}
+            memory={binding?.storyMemory ?? ''}
+            wsPath={wsPath}
+            reload={reload}
+          />
+        ) : null}
+        {tab === 'instruction' ? (
+          <InstructionContent
+            sessionId={sessionId}
+            staged={binding?.pendingInstruction ?? ''}
+            reload={reload}
+          />
+        ) : null}
+        {tab === 'inspector' ? (
+          <InspectorTray
+            sessionId={sessionId}
+            wsPath={wsPath}
+            embedded={true}
+          />
+        ) : null}
+      </div>
     </div>
   )
 }

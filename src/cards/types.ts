@@ -12,6 +12,9 @@ export const LORE_POSITIONS = [
 ] as const
 export type LorePosition = (typeof LORE_POSITIONS)[number]
 
+export const SELECTIVE_LOGIC = ['and_any', 'not_any'] as const
+export type SelectiveLogic = (typeof SELECTIVE_LOGIC)[number]
+
 /** One lorebook entry carried by a character card or standalone lorebook. */
 export const LoreEntry = z.object({
   id: z.string(),
@@ -20,6 +23,12 @@ export const LoreEntry = z.object({
   content: z.string().default(''),
   /** Trigger keywords; an empty list with constant=false never fires. */
   keys: z.array(z.string()).default([]),
+  /** Secondary filter keywords for selective activation. */
+  secondaryKeys: z.array(z.string()).default([]),
+  /** When true, activation requires satisfying secondary keyword logic. */
+  selective: z.boolean().default(false),
+  /** Selective logic: 'and_any' (must match at least one) or 'not_any' (must match none). */
+  selectiveLogic: z.enum(SELECTIVE_LOGIC).default('and_any'),
   /** Treat each key as a regular expression instead of a substring. */
   useRegex: z.boolean().default(false),
   /** Always injected, regardless of keyword matches. */
@@ -130,6 +139,9 @@ export type UserPersona = z.infer<typeof UserPersona>
 export const SPEAKER_MODES = ['auto', 'round_robin', 'manual'] as const
 export type SpeakerMode = (typeof SPEAKER_MODES)[number]
 
+export const AUTHOR_NOTE_ROLES = ['system', 'user', 'assistant'] as const
+export type AuthorNoteRole = (typeof AUTHOR_NOTE_ROLES)[number]
+
 /** One turn's swipe candidates and current selection. */
 export const SwipeTurnState = z.object({
   index: z.number().int().min(0).default(0),
@@ -156,6 +168,12 @@ export const SessionBinding = z.object({
   pendingInstruction: z.string().nullable().optional(),
   /** Persistent scene direction / mood / atmosphere (Author's Note), active across turns until cleared. */
   authorNote: z.string().nullable().optional(),
+  /** Insertion depth for Author's Note: 0 = prompt end, 1..N = N turns from bottom. */
+  authorNoteDepth: z.number().int().min(0).max(100).nullable().optional(),
+  /** Message role for Author's Note insertion: system, user, or assistant. */
+  authorNoteRole: z.enum(AUTHOR_NOTE_ROLES).nullable().optional(),
+  /** Context slimming mode for multi-character group chats: compresses companion profiles and prunes opening scene repetitions. */
+  groupDietMode: z.boolean().nullable().optional(),
   /** Persistent story milestones, promises, secrets and facts to prevent long-term forgetting. */
   storyMemory: z.string().nullable().optional(),
   /** Selected opening greeting index: 0 = firstMessage, 1..N = alternateGreetings[index - 1]. */

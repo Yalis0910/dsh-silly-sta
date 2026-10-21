@@ -129,7 +129,7 @@ export function RoleplayUserNode(props: UserNodeProps): ReactNode {
               CSS used to provide. */}
           <div className="rp-user-text">{body}</div>
           {instruction !== undefined ? (
-            <div className="rp-user-instruction">⚙ {instruction}</div>
+            <div className="rp-user-instruction">指令: {instruction}</div>
           ) : null}
         </div>
       </div>

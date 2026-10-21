@@ -45,6 +45,12 @@ export interface RoleplaySettings {
   readingFontFamily: 'default' | 'serif' | 'sans'
   /** Subtle contrast emphasis on 『』 dialogue. */
   dialogueHighlight: boolean
+  /** Default token diet mode for multi-character group chats. */
+  groupDietMode: boolean
+  /** Default insertion depth for Author's Note. */
+  authorNoteDepth: number
+  /** Default insertion role for Author's Note ('system' | 'user' | 'assistant'). */
+  authorNoteRole: 'system' | 'user' | 'assistant'
 }
 
 type SettingsKey = keyof RoleplaySettings
@@ -62,6 +68,9 @@ const fields = {
   readingFontSize: z.union(['13', '14', '15', '16']).default('14'),
   readingFontFamily: z.union(['default', 'serif', 'sans']).default('default'),
   dialogueHighlight: z.boolean().default(true),
+  groupDietMode: z.boolean().default(false),
+  authorNoteDepth: z.number().min(0).max(100).default(0),
+  authorNoteRole: z.union(['system', 'user', 'assistant']).default('system'),
 } satisfies Record<SettingsKey, z>
 
 /** Every settings field name, in declaration order. */

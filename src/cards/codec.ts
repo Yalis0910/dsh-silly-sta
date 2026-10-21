@@ -52,7 +52,7 @@ function normalizeKeys(value: unknown): string[] {
   return text.split(/[,，]/).map(part => part.trim()).filter(Boolean)
 }
 
-function normalizeLoreEntry(raw: unknown): LoreEntry | undefined {
+export function normalizeLoreEntry(raw: unknown): LoreEntry | undefined {
   const entry = asRecord(raw)
   if (!entry) return undefined
   const disabled = entry.disable === true || entry.disabled === true || entry.enabled === false
@@ -61,6 +61,11 @@ function normalizeLoreEntry(raw: unknown): LoreEntry | undefined {
     title: asString(entry.comment) || asString(entry.title) || asString(entry.name),
     content: asString(entry.content),
     keys: normalizeKeys(entry.keys ?? entry.key),
+    secondaryKeys: normalizeKeys(entry.secondary_keys ?? entry.secondaryKeys ?? entry.keysecondary),
+    selective: entry.selective === true,
+    selectiveLogic: (entry.selective_logic === 1 || entry.selective_logic === 'not_any' || entry.selectiveLogic === 'not_any')
+      ? 'not_any'
+      : 'and_any',
     useRegex: entry.useRegex === true || entry.use_regex === true,
     constant: entry.constant === true,
     position: normalizePosition(entry.position),
@@ -175,15 +180,16 @@ export function cardFromPng(bytes: Buffer): CharacterCard | undefined {
   return cardFromInterchange(json)
 }
 
-function loreEntryToInterchange(entry: LoreEntry, index: number): Record<string, unknown> {
+export function loreEntryToInterchange(entry: LoreEntry, index: number = 0): Record<string, unknown> {
   return {
     id: index,
     comment: entry.title,
     content: entry.content,
     key: entry.keys,
     keys: entry.keys,
-    secondary_keys: [],
-    selective: false,
+    secondary_keys: entry.secondaryKeys ?? [],
+    selective: entry.selective ?? false,
+    selective_logic: entry.selectiveLogic === 'not_any' ? 1 : 0,
     use_regex: entry.useRegex,
     constant: entry.constant,
     position: entry.position,

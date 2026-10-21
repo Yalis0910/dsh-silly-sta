@@ -49,8 +49,11 @@ export interface SessionState {
     customOpening?: string
     userPersonaId?: string
     choiceMode?: boolean
+    groupDietMode?: boolean
     pendingInstruction?: string
     authorNote?: string
+    authorNoteDepth?: number
+    authorNoteRole?: 'system' | 'user' | 'assistant'
     storyMemory?: string
     greetingIndex?: number
     swipes?: Record<string, SwipeTurnValue>
@@ -73,6 +76,9 @@ export interface SessionState {
   } | null
   groupCards?: GroupCardSummary[]
   choiceModeDefault: boolean
+  groupDietModeDefault?: boolean
+  authorNoteDepthDefault?: number
+  authorNoteRoleDefault?: 'system' | 'user' | 'assistant'
   userPersonas?: UserPersonaValue[]
   defaultUserName?: string
 }
@@ -94,6 +100,9 @@ export interface LoreEntryValue {
   title: string
   content: string
   keys: string[]
+  secondaryKeys?: string[]
+  selective?: boolean
+  selectiveLogic?: 'and_any' | 'not_any'
   useRegex: boolean
   constant: boolean
   position: 'system_top' | 'before_char' | 'after_char' | 'user_top' | 'assistant_top' | 'at_depth'
@@ -200,6 +209,9 @@ export interface RoleplaySettingsValue {
   readingFontSize?: '13' | '14' | '15' | '16'
   readingFontFamily?: 'default' | 'serif' | 'sans'
   dialogueHighlight?: boolean
+  authorNoteDepth?: number
+  authorNoteRole?: 'system' | 'user' | 'assistant'
+  groupDietMode?: boolean
 }
 
 const BASE = '/x-roleplay'
@@ -287,10 +299,13 @@ export const api = {
     characterId?: string | null
     userPersonaId?: string | null
     choiceMode?: boolean | null
+    groupDietMode?: boolean | null
     /** One-shot stage direction sent with the next message; null clears it. */
     pendingInstruction?: string | null
     /** Persistent scene direction or author's note; null clears it. */
     authorNote?: string | null
+    authorNoteDepth?: number | null
+    authorNoteRole?: 'system' | 'user' | 'assistant' | null
     /** Persistent story milestones, promises and facts; null clears it. */
     storyMemory?: string | null
     /** Currently selected greeting index for the session. */

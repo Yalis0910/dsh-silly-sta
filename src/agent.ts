@@ -213,6 +213,8 @@ export function apply(ctx: Context, config: Config): void {
       const recentMsgs = recentMessagesList(agent, 30)
       const seed = String(agent?.session?.deriveMessages?.().length ?? 0)
 
+      const groupDietMode = binding?.groupDietMode ?? settings.groupDietMode ?? false
+
       if (isGroup && cards.length >= 2) {
         const allLore = svc.resolveGroupAllLore(cards, wsOf(binding))
         parts.push(groupCharacterSection(
@@ -224,6 +226,7 @@ export function apply(ctx: Context, config: Config): void {
           binding?.customOpening,
           allLore,
           seed,
+          groupDietMode,
         ))
       } else if (cards.length > 0) {
         const card = cards[0]!
@@ -319,6 +322,10 @@ export function apply(ctx: Context, config: Config): void {
       const binding = agent ? svc.getBinding(String(agent.id)) : undefined
       const note = binding?.authorNote?.trim()
       if (!note) return ''
+      const anDepth = binding?.authorNoteDepth ?? 0
+      const anRole = binding?.authorNoteRole ?? 'system'
+      // If depth > 0 or role is not system, it is dynamically positioned in messages during agent/pre-step
+      if (anDepth > 0 || anRole !== 'system') return ''
       const card = binding?.characterId ? svc.getCard(binding.characterId, wsOf(binding)) : undefined
       const identity = resolveUserIdentity(svc.settings.get(), binding, card)
       return escapeBraces(`[常驻场景指示与剧情备忘]\n${applyMacros(note, card?.name ?? '', identity.userName)}`)
@@ -457,7 +464,41 @@ export function apply(ctx: Context, config: Config): void {
       try {
         await svc.updateBinding(sessionId, { pendingInstruction: null })
       } catch {}
-      return { kind: 'enter' as const, messages }
+      modified = true
+    }
+
+    // ── Author's Note with custom depth or non-system role ──
+    const authorNote = binding?.authorNote?.trim()
+    const anDepth = binding?.authorNoteDepth ?? 0
+    const anRole = binding?.authorNoteRole ?? 'system'
+    if (authorNote && (anDepth > 0 || anRole !== 'system')) {
+      const card = binding?.characterId ? svc.getCard(binding.characterId, wsOf(binding)) : undefined
+      const identity = resolveUserIdentity(svc.settings.get(), binding, card)
+      const noteText = `[常驻场景指示与剧情备忘]\n${applyMacros(authorNote, card?.name ?? '', identity.userName)}`
+
+      let insertIndex = messages.length
+      if (anDepth > 0) {
+        let userTurnsSeen = 0
+        for (let i = messages.length - 1; i >= 0; i--) {
+          const m = messages[i]
+          const source = (m as any)?.source as { kind?: string } | undefined
+          const role = (m as any)?.role ?? (source?.kind === 'user' ? 'user' : undefined)
+          if (role === 'user') {
+            userTurnsSeen++
+            if (userTurnsSeen >= anDepth) {
+              insertIndex = i
+              break
+            }
+          }
+        }
+      }
+
+      messages.splice(insertIndex, 0, {
+        role: anRole,
+        content: [{ type: 'text', text: noteText }],
+        source: { kind: ROLEPLAY_SOURCE },
+      } as any)
+      modified = true
     }
 
     if (modified) {

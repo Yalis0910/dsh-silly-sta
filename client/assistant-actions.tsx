@@ -4,7 +4,7 @@
  * from its own user prompt with swipe candidate branching. Renders nothing outside role-play sessions.
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { IconRefreshOutlineRegular, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconEditOutlineRegular, IconRefreshOutlineRegular, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import { api } from './api.ts'
 import { rewindAndResend } from './runtime.ts'
 import { turnOf, useAgentPreset, useChatFlow, useSessionRunning, type ChatFlow, type SessionSlotProps } from './compat.ts'
@@ -176,6 +176,57 @@ export function RoleplayAssistantActions(props: ActionProps): ReactNode {
     void persistSwipe(next)
   }, [swipe, swipeKey, persistSwipe])
 
+  const handleDeleteBranch = useCallback(() => {
+    if (!swipeKey || swipe.variants.length <= 1) return
+    const nextVariants = swipe.variants.filter((_, i) => i !== swipe.index)
+    const nextIndex = Math.min(swipe.index, nextVariants.length - 1)
+    const targetHtml = nextVariants[nextIndex]
+    const proseEl = findProseElement(btnRef.current)
+    if (proseEl && targetHtml) {
+      proseEl.innerHTML = targetHtml
+    }
+    const next = { index: nextIndex, variants: nextVariants }
+    setSwipe(next)
+    saveSwipe(swipeKey, next)
+    void persistSwipe(next)
+  }, [swipe, swipeKey, persistSwipe])
+
+  const [editing, setEditing] = useState(false)
+  const [editText, setEditText] = useState('')
+
+  const startEdit = useCallback(() => {
+    const proseEl = findProseElement(btnRef.current)
+    const currentHtml = proseEl?.innerHTML || ''
+    const temp = document.createElement('div')
+    temp.innerHTML = currentHtml
+    const plain = temp.innerText || temp.textContent || ''
+    setEditText(plain.trim())
+    setEditing(true)
+  }, [])
+
+  const saveEdit = useCallback(() => {
+    if (!swipeKey || editText.trim() === '') return
+    const proseEl = findProseElement(btnRef.current)
+    const formattedHtml = editText
+      .split('\n\n')
+      .map(p => `<p>${p.replace(/\n/g, '<br/>')}</p>`)
+      .join('')
+    if (proseEl) {
+      proseEl.innerHTML = formattedHtml
+    }
+    const nextVariants = [...swipe.variants]
+    if (nextVariants.length === 0) {
+      nextVariants.push(formattedHtml)
+    } else {
+      nextVariants[swipe.index] = formattedHtml
+    }
+    const next = { ...swipe, variants: nextVariants }
+    setSwipe(next)
+    saveSwipe(swipeKey, next)
+    void persistSwipe(next)
+    setEditing(false)
+  }, [editText, swipe, swipeKey, persistSwipe])
+
   const handleReroll = useCallback(async () => {
     if (!context || context.prevTurnEnd === undefined || context.userText.trim() === '' || running || busy !== false) return
     const proseEl = findProseElement(btnRef.current)
@@ -227,6 +278,16 @@ export function RoleplayAssistantActions(props: ActionProps): ReactNode {
           >
             ›
           </button>
+          <button
+            type="button"
+            className="rp-swipe-btn"
+            disabled={running}
+            onClick={handleDeleteBranch}
+            title={t('rp.swipe.delete')}
+            style={{ marginLeft: 2, fontSize: 13 }}
+          >
+            ×
+          </button>
         </div>
       ) : null}
       <Tooltip label={canRegenerate ? (showSwipe ? t('rp.swipe.reroll') : t('rp.regen.reply')) : t('rp.regen.unavailable')} side="bottom">
@@ -240,6 +301,33 @@ export function RoleplayAssistantActions(props: ActionProps): ReactNode {
           {busy === 'reply' ? <span className="rp-imgspin" /> : <IconRefreshOutlineRegular size={16} />}
         </button>
       </Tooltip>
+      <Tooltip label={t('rp.swipe.edit')} side="bottom">
+        <button
+          type="button"
+          className="rp-msg-action"
+          disabled={running}
+          onClick={startEdit}
+        >
+          <IconEditOutlineRegular size={16} />
+        </button>
+      </Tooltip>
+      {editing ? (
+        <div className="rp-assistant-editbox" style={{ width: '100%', marginTop: 8, padding: '8px', background: 'var(--yh-paper-subtle)', borderRadius: 10, border: '1px solid var(--yh-border)' }}>
+          <textarea
+            className="rp-textarea"
+            rows={5}
+            value={editText}
+            onChange={e => setEditText(e.target.value)}
+            placeholder="修改本段回复正文..."
+            style={{ width: '100%', boxSizing: 'border-box', fontSize: 13 }}
+            autoFocus
+          />
+          <div style={{ display: 'flex', gap: 6, marginTop: 6, justifyContent: 'flex-end' }}>
+            <button type="button" className="rp-btn rp-btn-primary" onClick={saveEdit}>保存此段</button>
+            <button type="button" className="rp-btn" onClick={() => setEditing(false)}>取消</button>
+          </div>
+        </div>
+      ) : null}
     </>
   )
 }

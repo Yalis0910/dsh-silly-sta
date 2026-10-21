@@ -3,77 +3,9 @@
  * per-request so card bindings and settings changes apply immediately.
  */
 import type { CharacterCard, LoreEntry } from './cards/types.ts'
+import { applyMacros, type MacroContext } from './macros.ts'
 
-export interface MacroContext {
-  charDescription?: string | undefined
-  charPersonality?: string | undefined
-  scenario?: string | undefined
-  userPersona?: string | undefined
-  charVersion?: string | undefined
-  original?: string | undefined
-}
-
-/** Replace the card macros with live participant names and card attributes. */
-export function applyMacros(
-  text: string,
-  charName: string,
-  userName: string,
-  context?: MacroContext,
-): string {
-  if (!text) return ''
-  let result = text
-    .replaceAll(/\{\{\s*char\s*\}\}/gi, charName)
-    .replaceAll(/\{\{\s*user\s*\}\}/gi, userName)
-
-  if (context?.charDescription !== undefined) {
-    result = result.replaceAll(/\{\{\s*description\s*\}\}/gi, context.charDescription)
-  }
-  if (context?.charPersonality !== undefined) {
-    result = result
-      .replaceAll(/\{\{\s*personality\s*\}\}/gi, context.charPersonality)
-      .replaceAll(/\{\{\s*char_persona\s*\}\}/gi, context.charPersonality)
-      .replaceAll(/\{\{\s*char_personality\s*\}\}/gi, context.charPersonality)
-  }
-  if (context?.scenario !== undefined) {
-    result = result.replaceAll(/\{\{\s*scenario\s*\}\}/gi, context.scenario)
-  }
-  if (context?.userPersona !== undefined) {
-    result = result
-      .replaceAll(/\{\{\s*persona\s*\}\}/gi, context.userPersona)
-      .replaceAll(/\{\{\s*user_persona\s*\}\}/gi, context.userPersona)
-  }
-  if (context?.charVersion !== undefined) {
-    result = result.replaceAll(/\{\{\s*char_version\s*\}\}/gi, context.charVersion)
-  }
-
-  result = result.replaceAll(/\{\{\s*original\s*\}\}/gi, context?.original ?? '')
-
-  if (/\{\{\s*(?:time|date|weekday|isodate)\s*\}\}/i.test(result)) {
-    const now = new Date()
-    const timeStr = now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
-    const dateStr = now.toLocaleDateString('zh-CN')
-    const weekdays = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六']
-    const weekdayStr = weekdays[now.getDay()] ?? ''
-    const isoDateStr = now.toISOString().split('T')[0] ?? ''
-
-    result = result
-      .replaceAll(/\{\{\s*time\s*\}\}/gi, timeStr)
-      .replaceAll(/\{\{\s*date\s*\}\}/gi, dateStr)
-      .replaceAll(/\{\{\s*weekday\s*\}\}/gi, weekdayStr)
-      .replaceAll(/\{\{\s*isodate\s*\}\}/gi, isoDateStr)
-  }
-
-  result = result.replaceAll(/\{\{\s*random\s*::\s*([^}]+)\s*\}\}/gi, (_match, choicesStr: string) => {
-    const sep = choicesStr.includes('|') ? '|' : (choicesStr.includes('，') ? '，' : ',')
-    const options = choicesStr.split(sep).map(s => s.trim()).filter(Boolean)
-    if (options.length === 0) return ''
-    return options[Math.floor(Math.random() * options.length)] ?? options[0]!
-  })
-
-  result = result.replaceAll(/\{\{\s*input\s*\}\}/gi, '')
-
-  return result
-}
+export { applyMacros, type MacroContext }
 
 /** Base rules for the role-play mode, independent of the bound character. */
 export function roleplayRules(userName: string): string {
@@ -218,34 +150,82 @@ export function isProbable(entryId: string, probability: number, seed = ''): boo
 }
 
 /** Check whether one lore entry matches against a text snippet. */
-export function matchLoreEntry(entry: LoreEntry, text: string, seed = ''): { matched: boolean; matchedKey?: string } {
-  if (!entry.enabled) return { matched: false }
+export function matchLoreEntry(
+  entry: LoreEntry,
+  text: string,
+  seed = '',
+): { matched: boolean; matchedKey?: string } {
+  if (entry.enabled === false) return { matched: false }
   if (entry.constant) return { matched: true }
-  if (!isProbable(entry.id, entry.probability, seed)) return { matched: false }
+  if (typeof entry.probability === 'number' && !isProbable(entry.id, entry.probability, seed)) return { matched: false }
   if (entry.keys.length === 0) return { matched: false }
+
+  let primaryMatched = false
+  let matchedKey: string | undefined
   for (const key of entry.keys) {
     if (entry.useRegex) {
       try {
-        if (new RegExp(key, 'iu').test(text)) return { matched: true, matchedKey: key }
+        if (new RegExp(key, 'iu').test(text)) {
+          primaryMatched = true
+          matchedKey = key
+          break
+        }
       } catch {
         // ignore invalid regex
       }
     } else if (text.toLowerCase().includes(key.toLowerCase())) {
-      return { matched: true, matchedKey: key }
+      primaryMatched = true
+      matchedKey = key
+      break
     }
   }
-  return { matched: false }
+  if (!primaryMatched) return { matched: false }
+
+  // Check selective / secondary keys if enabled
+  if (entry.selective && entry.secondaryKeys && entry.secondaryKeys.length > 0) {
+    let secondaryHit = false
+    for (const sk of entry.secondaryKeys) {
+      if (entry.useRegex) {
+        try {
+          if (new RegExp(sk, 'iu').test(text)) {
+            secondaryHit = true
+            break
+          }
+        } catch {
+          // ignore invalid regex
+        }
+      } else if (text.toLowerCase().includes(sk.toLowerCase())) {
+        secondaryHit = true
+        break
+      }
+    }
+    if (entry.selectiveLogic === 'not_any') {
+      if (secondaryHit) return { matched: false } // Excluded by secondary key
+    } else {
+      // default: and_any
+      if (!secondaryHit) return { matched: false } // Required secondary key missing
+    }
+  }
+
+  return matchedKey !== undefined ? { matched: true, matchedKey } : { matched: true }
 }
 
-function getTextForEntry(entry: LoreEntry, recentMessages: string[] | string, defaultDepth: number): string {
-  if (typeof recentMessages === 'string') return recentMessages
-  const depth = (entry.scanDepth && entry.scanDepth > 0) ? entry.scanDepth : defaultDepth
-  return recentMessages.slice(-depth).join('\n')
+function getTextForEntry(entry: LoreEntry, recentMessages: string[] | string, defaultDepth: number, extraAppendedText = ''): string {
+  let base = ''
+  if (typeof recentMessages === 'string') {
+    base = recentMessages
+  } else {
+    const depth = (entry.scanDepth && entry.scanDepth > 0) ? entry.scanDepth : defaultDepth
+    base = recentMessages.slice(-depth).join('\n')
+  }
+  return extraAppendedText ? `${base}\n${extraAppendedText}` : base
 }
 
 /**
  * Split the card's enabled lore entries by injection position, keeping only
  * constant entries and those whose keywords fire against the recent text.
+ * Also performs recursive scanning: newly triggered lore entries' content
+ * is scanned to trigger any cascading lore entries.
  * @param recentMessages - recent conversation text (or list of recent message texts).
  */
 export function selectLore(
@@ -253,11 +233,39 @@ export function selectLore(
   recentMessages: string[] | string,
   seed = '',
   defaultDepth = 6,
+  recursive = true,
 ): LoreGroups {
-  const fired = book.filter(entry => {
-    const text = getTextForEntry(entry, recentMessages, defaultDepth)
-    return matchLoreEntry(entry, text, seed).matched
-  })
+  const firedMap = new Map<string, LoreEntry>()
+  const constant = book.filter(entry => entry.enabled && entry.constant)
+  for (const entry of constant) {
+    firedMap.set(entry.id, entry)
+  }
+
+  let remaining = book.filter(entry => entry.enabled && !entry.constant)
+  let extraScanText = ''
+
+  const maxPasses = recursive ? 3 : 1
+  for (let pass = 0; pass < maxPasses; pass++) {
+    const newlyFired: LoreEntry[] = []
+    const nextRemaining: LoreEntry[] = []
+
+    for (const entry of remaining) {
+      const text = getTextForEntry(entry, recentMessages, defaultDepth, extraScanText)
+      if (matchLoreEntry(entry, text, seed).matched) {
+        newlyFired.push(entry)
+        firedMap.set(entry.id, entry)
+      } else {
+        nextRemaining.push(entry)
+      }
+    }
+
+    if (newlyFired.length === 0 || nextRemaining.length === 0) break
+    remaining = nextRemaining
+    // Feed newly activated lore content into the next recursive pass
+    extraScanText += '\n' + newlyFired.map(e => e.content).join('\n')
+  }
+
+  const fired = Array.from(firedMap.values())
   const byOrder = (a: LoreEntry, b: LoreEntry) => a.order - b.order
   return {
     top: fired.filter(entry => entry.position === 'system_top').sort(byOrder),
@@ -339,6 +347,8 @@ export function pureGroupCharacterSection(
   userName: string,
   userPersona: string,
   fusedOpening?: string | null,
+  groupDietMode = false,
+  hasHistory = false,
 ): string {
   if (cards.length === 0) return ''
   const activeCard = activeSpeakerId ? cards.find(c => c.id === activeSpeakerId) : undefined
@@ -358,23 +368,25 @@ export function pureGroupCharacterSection(
     const definition: string[] = ['[你当前扮演的主视角角色]', `名字：${activeCard.name}`]
     const persona = [activeCard.description, activeCard.personality].filter(t => t.trim()).map(macros)
     if (persona.length > 0) definition.push(`设定：\n${persona.join('\n\n')}`)
-    if (activeCard.scenario.trim()) definition.push(`场景设定：\n${macros(activeCard.scenario)}`)
-    if (activeCard.exampleDialogs.trim()) definition.push(`对话示例：\n${macros(activeCard.exampleDialogs)}`)
+    if (activeCard.scenario?.trim()) definition.push(`场景设定：\n${macros(activeCard.scenario)}`)
+    if (activeCard.exampleDialogs?.trim()) definition.push(`对话示例：\n${macros(activeCard.exampleDialogs)}`)
     parts.push(definition.join('\n\n'))
 
     const companions = cards.filter(c => c.id !== activeCard.id)
     if (companions.length > 0) {
+      const maxCompanionLen = groupDietMode ? 80 : 150
       const companionList = companions.map(c => {
-        const desc = [c.description, c.personality].filter(t => t.trim()).join('；').slice(0, 150)
+        const desc = [c.description, c.personality].filter(t => t && t.trim()).join('；').slice(0, maxCompanionLen)
         return `- 【${c.name}】：${applyMacros(desc, c.name, userName)}`
       }).join('\n')
       parts.push(`[当前在场同伴]\n除了你（${activeCard.name}）之外，现场还有以下同伴角色在场：\n${companionList}\n你现在必须以【${activeCard.name}】的身份做出回应。可以与在场同伴互动或对话，但发言和行为必须严格符合${activeCard.name}的人设与视角。`)
     }
-    if (activeCard.systemPrompt.trim()) parts.push(cardRulesSection(activeCard.systemPrompt, activeCard.name, userName, activeCtx))
+    if (activeCard.systemPrompt?.trim()) parts.push(cardRulesSection(activeCard.systemPrompt, activeCard.name, userName, activeCtx))
   } else {
     // ── Auto Drama Mode: Multi-character group stage ──
+    const maxProfileLen = groupDietMode ? 120 : 220
     const memberProfiles = cards.map((c, index) => {
-      const desc = [c.description, c.personality].filter(t => t.trim()).join('；').slice(0, 220)
+      const desc = [c.description, c.personality].filter(t => t && t.trim()).join('；').slice(0, maxProfileLen)
       return `${index + 1}. 【${c.name}】：\n${applyMacros(desc, c.name, userName)}`
     }).join('\n\n')
 
@@ -394,7 +406,11 @@ export function pureGroupCharacterSection(
 
   const opening = fusedOpening?.trim() || cards[0]?.firstMessage?.trim()
   if (opening) {
-    parts.push(`[开场场景]\n对话由这段开场白/初始场景开始（用户已读过，不要重复它，衔接其后的剧情推进即可）：\n${applyMacros(opening, activeCard?.name ?? cards[0]?.name ?? '', userName)}`)
+    if (groupDietMode && hasHistory) {
+      parts.push(`[开场场景]\n初始开场场景已在上方历史记录中确立，请直接紧承最新情节继续推进，切勿重新复述开场。`)
+    } else {
+      parts.push(`[开场场景]\n对话由这段开场白/初始场景开始（用户已读过，不要重复它，衔接其后的剧情推进即可）：\n${applyMacros(opening, activeCard?.name ?? cards[0]?.name ?? '', userName)}`)
+    }
   }
 
   return parts.join('\n\n')
@@ -410,18 +426,24 @@ export function groupCharacterSection(
   fusedOpening?: string | null,
   allLore?: LoreEntry[],
   seed = '',
+  groupDietMode = false,
 ): string {
   if (cards.length === 0) return ''
   const activeCard = activeSpeakerId ? cards.find(c => c.id === activeSpeakerId) : undefined
   const lore = selectLore(allLore ?? cards.flatMap(c => c.book), recentMessages, seed)
   const parts: string[] = []
 
-  if (lore.top.length > 0) parts.push(loreSection(lore.top, activeCard?.name ?? '群聊', userName))
-  if (lore.before.length > 0) parts.push(loreSection(lore.before, activeCard?.name ?? '群聊', userName))
+  const topLore = groupDietMode ? lore.top.slice(0, 3) : lore.top
+  const beforeLore = groupDietMode ? lore.before.slice(0, 3) : lore.before
+  const afterLore = groupDietMode ? lore.after.slice(0, 4) : lore.after
 
-  parts.push(pureGroupCharacterSection(cards, activeSpeakerId, userName, userPersona, fusedOpening))
+  if (topLore.length > 0) parts.push(loreSection(topLore, activeCard?.name ?? '群聊', userName))
+  if (beforeLore.length > 0) parts.push(loreSection(beforeLore, activeCard?.name ?? '群聊', userName))
 
-  if (lore.after.length > 0) parts.push(loreSection(lore.after, activeCard?.name ?? '群聊', userName))
+  const hasHistory = Array.isArray(recentMessages) ? recentMessages.length >= 2 : recentMessages.trim().length > 60
+  parts.push(pureGroupCharacterSection(cards, activeSpeakerId, userName, userPersona, fusedOpening, groupDietMode, hasHistory))
+
+  if (afterLore.length > 0) parts.push(loreSection(afterLore, activeCard?.name ?? '群聊', userName))
 
   return parts.join('\n\n')
 }

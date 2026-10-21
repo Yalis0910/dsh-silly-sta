@@ -272,6 +272,9 @@ async function route(req: IncomingMessage, res: ServerResponse, service: Rolepla
           : null,
         groupCards,
         choiceModeDefault: settings.choiceMode,
+        groupDietModeDefault: settings.groupDietMode ?? false,
+        authorNoteDepthDefault: settings.authorNoteDepth ?? 0,
+        authorNoteRoleDefault: settings.authorNoteRole ?? 'system',
         userPersonas: settings.userPersonas ?? [],
         defaultUserName: settings.userName,
       })

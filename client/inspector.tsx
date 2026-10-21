@@ -6,12 +6,13 @@ import { useTrayDismiss } from './compat.ts'
 interface InspectorTrayProps {
   sessionId: string
   wsPath?: string
-  onClose: () => void
+  onClose?: () => void
+  embedded?: boolean
 }
 
-export function InspectorTray({ sessionId, wsPath, onClose }: InspectorTrayProps): React.ReactNode {
+export function InspectorTray({ sessionId, wsPath, onClose, embedded = false }: InspectorTrayProps): React.ReactNode {
   const panelRef = useRef<HTMLDivElement | null>(null)
-  useTrayDismiss(panelRef, onClose)
+  useTrayDismiss(panelRef, embedded ? () => {} : (onClose ?? (() => {})))
   const t = useT()
   const [report, setReport] = useState<PromptInspectionReport | null>(null)
   const [loading, setLoading] = useState(true)
@@ -59,7 +60,7 @@ export function InspectorTray({ sessionId, wsPath, onClose }: InspectorTrayProps
   }, [report])
 
   return (
-    <div ref={panelRef} className="rp-tray-panel rp-inspector-panel">
+    <div ref={embedded ? undefined : panelRef} className={embedded ? 'rp-inspector-embedded' : 'rp-tray-panel rp-inspector-panel'}>
       <div className="rp-tray-header">
         <div className="rp-inspector-title-row">
           <span className="rp-tray-title">{t('rp.inspector.title')}</span>
@@ -73,7 +74,9 @@ export function InspectorTray({ sessionId, wsPath, onClose }: InspectorTrayProps
           <button type="button" className="rp-btn-subtle" onClick={reload} disabled={loading}>
             {loading ? t('rp.inspector.refreshing') : t('rp.inspector.refresh')}
           </button>
-          <button type="button" className="rp-popover-close" onClick={onClose} title="关闭">×</button>
+          {!embedded && onClose ? (
+            <button type="button" className="rp-popover-close" onClick={onClose} title="关闭">×</button>
+          ) : null}
         </div>
       </div>
 

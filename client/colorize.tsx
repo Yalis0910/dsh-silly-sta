@@ -14,6 +14,10 @@
  */
 import type { ReactNode } from 'react'
 import type { RegexScriptValue } from './api.ts'
+import { applyMacros, type MacroContext } from '../src/macros.ts'
+
+export { applyMacros, type MacroContext }
+export const replaceMacros = applyMacros
 
 /** Spoken dialogue: 『…』 / 「…」 / “…”. */
 const SAY_RE = /『[^『』\n]*』|「[^「」\n]*」|“[^“”\n]*”/g
@@ -21,77 +25,6 @@ const SAY_RE = /『[^『』\n]*』|「[^「」\n]*」|“[^“”\n]*”/g
 const THINK_RE = /（[^（）\n]*）/g
 /** Speaker prefix in group chat: 【…】 */
 const SPEAKER_RE = /(?:^|\n)\s*(【[^】\n]+】)/g
-
-export interface MacroContext {
-  charDescription?: string | undefined
-  charPersonality?: string | undefined
-  scenario?: string | undefined
-  userPersona?: string | undefined
-  charVersion?: string | undefined
-  original?: string | undefined
-}
-
-/** Replace the card macros with live names (client-side mirror of the host's applyMacros). */
-export function replaceMacros(
-  text: string,
-  charName: string,
-  userName: string,
-  context?: MacroContext,
-): string {
-  if (!text) return ''
-  let result = text
-    .replaceAll(/\{\{\s*char\s*\}\}/gi, charName)
-    .replaceAll(/\{\{\s*user\s*\}\}/gi, userName)
-
-  if (context?.charDescription !== undefined) {
-    result = result.replaceAll(/\{\{\s*description\s*\}\}/gi, context.charDescription)
-  }
-  if (context?.charPersonality !== undefined) {
-    result = result
-      .replaceAll(/\{\{\s*personality\s*\}\}/gi, context.charPersonality)
-      .replaceAll(/\{\{\s*char_persona\s*\}\}/gi, context.charPersonality)
-      .replaceAll(/\{\{\s*char_personality\s*\}\}/gi, context.charPersonality)
-  }
-  if (context?.scenario !== undefined) {
-    result = result.replaceAll(/\{\{\s*scenario\s*\}\}/gi, context.scenario)
-  }
-  if (context?.userPersona !== undefined) {
-    result = result
-      .replaceAll(/\{\{\s*persona\s*\}\}/gi, context.userPersona)
-      .replaceAll(/\{\{\s*user_persona\s*\}\}/gi, context.userPersona)
-  }
-  if (context?.charVersion !== undefined) {
-    result = result.replaceAll(/\{\{\s*char_version\s*\}\}/gi, context.charVersion)
-  }
-
-  result = result
-    .replaceAll(/\{\{\s*original\s*\}\}/gi, context?.original ?? '')
-    .replaceAll(/\{\{\s*input\s*\}\}/gi, '')
-
-  if (/\{\{\s*(?:time|date|weekday|isodate)\s*\}\}/i.test(result)) {
-    const now = new Date()
-    const timeStr = now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
-    const dateStr = now.toLocaleDateString('zh-CN')
-    const weekdays = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六']
-    const weekdayStr = weekdays[now.getDay()] ?? ''
-    const isoDateStr = now.toISOString().split('T')[0] ?? ''
-
-    result = result
-      .replaceAll(/\{\{\s*time\s*\}\}/gi, timeStr)
-      .replaceAll(/\{\{\s*date\s*\}\}/gi, dateStr)
-      .replaceAll(/\{\{\s*weekday\s*\}\}/gi, weekdayStr)
-      .replaceAll(/\{\{\s*isodate\s*\}\}/gi, isoDateStr)
-  }
-
-  result = result.replaceAll(/\{\{\s*random\s*::\s*([^}]+)\s*\}\}/gi, (_match, choicesStr: string) => {
-    const sep = choicesStr.includes('|') ? '|' : (choicesStr.includes('，') ? '，' : ',')
-    const options = choicesStr.split(sep).map(s => s.trim()).filter(Boolean)
-    if (options.length === 0) return ''
-    return options[Math.floor(Math.random() * options.length)] ?? options[0]!
-  })
-
-  return result
-}
 
 /** One compiled card rule: color whatever the regex (or its group 1) matches. */
 export interface CardColorRule {
